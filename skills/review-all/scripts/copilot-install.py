@@ -37,6 +37,7 @@ def assemble(config=None):
             "name": agent_id(axis),
             "description": ("Read-only investigation of a selected review finding" if axis == "deep-dive" else
                             f"review-all {axis}: independent, evidence-based review; requires a dispatch package"),
+            "infer": axis != "deep-dive",
             "tools": tools,
             "model": model_for(axis, config),
             "modelPolicy": "required",
