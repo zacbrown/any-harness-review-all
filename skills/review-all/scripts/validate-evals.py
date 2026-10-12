@@ -41,6 +41,7 @@ Usage: validate-evals.py [EVALS_DIR]   (defaults to ../evals next to this file)
 import json
 import os
 import subprocess
+from portable import run
 import sys
 
 SUPPORTED_KINDS = {"synthetic-diff"}
@@ -65,7 +66,7 @@ def validate_case(path):
     stem = name[:-5] if name.endswith(".json") else name
 
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             spec = json.load(f)
     except (OSError, ValueError) as ex:
         return [f"{name}: not valid JSON ({ex})"], warnings
@@ -201,7 +202,7 @@ def check_selection(case_path, selector):
     would score that as a recall regression in the model rather than as the
     config bug it is. This makes the config bug fail here instead.
     """
-    with open(case_path) as fh:
+    with open(case_path, encoding="utf-8") as fh:
         case = json.load(fh)
     name = os.path.basename(case_path)
     fixture = case.get("fixture") or {}
@@ -211,7 +212,7 @@ def check_selection(case_path, selector):
     records = _selector_records(files)
     if not records:
         return []
-    proc = subprocess.run(
+    proc = run(
         [sys.executable, selector], input=json.dumps(records),
         capture_output=True, text=True)
     if proc.returncode != 0:

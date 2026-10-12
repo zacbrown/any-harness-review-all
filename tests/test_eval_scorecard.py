@@ -18,7 +18,7 @@ def write_cases(evals_dir, cases):
         if n:
             crit["success_criteria"]["must_detect"] = [
                 {"root_cause_key_like": "k", "file": "f"} for _ in range(n)]
-        with open(os.path.join(evals_dir, f"{cid}.json"), "w") as fh:
+        with open(os.path.join(evals_dir, f"{cid}.json"), "w", encoding="utf-8") as fh:
             json.dump(crit, fh)
 
 

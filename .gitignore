@@ -16,6 +16,10 @@ Thumbs.db
 # Python
 __pycache__/
 *.pyc
+.venv/
+*.egg-info/
+build/
+dist/
 
 # Real anonymization blocklist — local only, never commit real names (public repo)
 tests/anonymization-blocklist.txt

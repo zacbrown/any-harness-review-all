@@ -68,7 +68,7 @@ class TestExportFindings(unittest.TestCase):
             files = sorted(os.listdir(d))
             self.assertEqual(
                 files, ["review-20260603T120000Z.json", "review-20260603T120000Z.sarif"])
-            with open(os.path.join(d, "review-20260603T120000Z.sarif")) as fh:
+            with open(os.path.join(d, "review-20260603T120000Z.sarif"), encoding="utf-8") as fh:
                 self.assertEqual(json.load(fh)["version"], "2.1.0")
 
     def test_finding_id_fallback(self):

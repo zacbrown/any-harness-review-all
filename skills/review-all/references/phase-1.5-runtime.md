@@ -11,32 +11,28 @@ Static review cannot catch a route that 500s, a template rendering blank, or a l
 Run Phase 1.5 only if **all** of:
 1. Phase 0 detected an open dev-server port matching the framework's typical port.
 2. Diff contains UI-relevant files: `.html`, `.tsx`, `.jsx`, `.vue`, `.svelte`, `.css`, `.scss`, `.tmpl`, framework template extensions.
-3. `toolchain.available.curl` is true (from Phase 0.0).
+3. `toolchain.available.capabilities.http` is true (from Phase 0.0).
 
-If `runtimeProbe == "force"`, condition (2) is bypassed — Step 1 runs whenever conditions (1) and (3) hold. Condition (3) is never bypassed: no `curl`, no probe.
+If `runtimeProbe == "force"`, condition (2) is bypassed — Step 1 runs whenever conditions (1) and (3) hold. HTTP support is built into the Python CLI; no curl or GNU timeout is needed.
 
 If any required condition fails → skip Phase 1.5 entirely. Do NOT prompt the user.
 
 ## Step 1 — Health probe (always, when running)
 
-For each detected dev-server port, retry up to 3 times with 2s backoff to absorb warm-up (e.g. `ng serve` binds the port before its HTTP stack answers):
+For each detected dev-server port, invoke the shared HTTP probe. It retries up to 3 times with 2s backoff to absorb warm-up (e.g. `ng serve` binds the port before its HTTP stack answers):
 
-```bash
-for i in 1 2 3; do
-  code=$(timeout 5 curl -s -o /dev/null -w '%{http_code}\n' "http://localhost:<port>/")
-  case "$code" in 2*|3*|401|403) break ;; esac
-  [ $i -lt 3 ] && sleep 2
-done
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all http-probe "http://localhost:<port>/" --timeout 5
 ```
 
-Use the final `code` value for recording.
+Use the final JSON `status`, `health`, `url` and timing for recording.
 
 Record `runtime.health[<port>]` in the Project Profile:
 - `2xx`/`3xx` → `healthy`
 - `401`/`403` → `auth-gated` — do NOT emit a finding (auth-protected dev routes are normal; treat as healthy for probe purposes)
 - other `4xx`/`5xx` → `unhealthy(<code>)` — emit one 🟠 IMPORTANT finding (`confidence: VERIFIED`) naming port and code
 - timeout / connection refused → `unreachable` — do NOT emit a finding (port-open with no HTTP responder is common for non-HTTP dev servers)
-- on `400` to `http://` → retry once against `https://localhost:<port>/` with `-k` (accept self-signed); record successful scheme
+- on `400` to local `http://` → the helper retries once against `https://localhost:<port>/` accepting self-signed certificates for loopback only; record successful scheme
 
 If `runtimeRoutes` is set in config, probe each listed route instead of `/`. Each route is requested as `http://localhost:<port><route>`. Lets users override unauthenticated-`/` assumptions for apps mounted at non-root paths.
 
@@ -49,15 +45,15 @@ Detection: read `package.json` `devDependencies`/`dependencies` for `playwright`
 If available:
 
 1. Determine routes to probe. Start with `/`. If the diff touches files under a discoverable routes directory (`src/routes`, `src/pages`, `src/app/**/page.{tsx,jsx}`, Angular route configs), map changed files to URL paths and include them.
-2. Create the per-run screenshot directory: `mkdir -p .claude/review-all/shots/<HEAD-sha>` (and `.claude/review-all/shots/pending-baseline` if step 4 will fire). Phase 0.9 only creates the top-level `.claude/review-all/` dir — nested subdirs are Phase 1.5's responsibility.
-3. For each route, headless-screenshot to `.claude/review-all/shots/<HEAD-sha>/<route-slug>.png` via a one-shot Node script the orchestrator writes to a temp file. Reuse the project's installed Playwright/Puppeteer.
+2. Use CLI `mkdir` to create `.claude/review-all/shots/<platform>/<HEAD-sha>` (and `pending-baseline/<platform>` if step 4 will fire). Keep platform-specific baselines: operating systems may render fonts differently. Phase 0.9 only creates the top-level directory.
+3. For each route, headless-screenshot to `.claude/review-all/shots/<platform>/<HEAD-sha>/<route-slug>.png` via a one-shot Node script the orchestrator writes to a temp file. Execute it through CLI `execute`, using the repository cwd and installed Playwright/Puppeteer, without installing or downloading browser dependencies.
 4. Detect a pixel-diff lib in `package.json` (`pixelmatch`, `odiff-bin`, `looks-same`, `resemblejs`, or Playwright's built-in `toHaveScreenshot`). If none present → skip the diff (still write the new shot); log `Runtime probe: visual diff SKIPPED (no pixel-diff lib)`. Do NOT byte-compare PNGs — headless renders differ byte-wise across runs (metadata, compression) even when pixels match, producing constant false positives.
-5. If a pixel-diff lib is present AND `.claude/review-all/shots/baseline/<route-slug>.png` exists → run the diff. Differences > `visualDiffThresholdPct`% of pixels (default `1.0`) → emit one 🔵 SUGGESTED finding (`confidence: VERIFIED`) per route, attaching both image paths.
+5. If a pixel-diff lib is present AND `.claude/review-all/shots/baseline/<platform>/<route-slug>.png` exists → run the diff. Differences > `visualDiffThresholdPct`% of pixels (default `1.0`) → emit one 🔵 SUGGESTED finding (`confidence: VERIFIED`) per route, attaching both image paths.
 6. If no baseline → write new shots as `pending-baseline/` so the user can promote them in Phase 4. Do NOT emit a finding.
 
 ## Failure modes
 
-Phase 1.5 catches its own errors. Any failure (curl missing despite preflight, dev-server died mid-run, Playwright crash, write-permission denied) → log one line in the report's gate section: `Runtime probe: SKIPPED (<reason>)`. Never propagate failure.
+Phase 1.5 records its own errors. Any failure (HTTP execution failure, dev-server died mid-run, Playwright crash, write-permission denied) → log one line in the report's gate section: `Runtime probe: SKIPPED (<reason>)`. Never conceal the error or turn it into a PASS; continue Phase 2.
 
 ## Configuration
 

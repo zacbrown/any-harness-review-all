@@ -16,21 +16,21 @@ class TestStateSweep(unittest.TestCase):
 
     def sweep(self, findings, seen, changed=None, head="HEAD1"):
         sp = os.path.join(self.d, "state.json")
-        with open(sp, "w") as fh:
+        with open(sp, "w", encoding="utf-8") as fh:
             json.dump({"version": 1, "migrations": [], "findings": findings}, fh)
         kp = os.path.join(self.d, "seen.json")
-        with open(kp, "w") as fh:
+        with open(kp, "w", encoding="utf-8") as fh:
             json.dump(seen, fh)
         env = dict(os.environ)
         if changed is not None:
             cp = os.path.join(self.d, "changed.json")
-            with open(cp, "w") as fh:
+            with open(cp, "w", encoding="utf-8") as fh:
                 json.dump(changed, fh)
             env["STATE_SWEEP_CHANGED_KEYS"] = cp
         p = subprocess.run([sys.executable, SCRIPT, sp, head, kp],
                            capture_output=True, text=True, env=env)
         self.assertEqual(p.returncode, 0, p.stderr)
-        with open(sp) as fh:
+        with open(sp, encoding="utf-8") as fh:
             return json.load(fh)["findings"]
 
     # --- F1 regression: a resolved finding that re-surfaces must reopen ---

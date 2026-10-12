@@ -5,6 +5,13 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack
+
+TEMPS = ExitStack()
+
+
+def tearDownModule():
+    TEMPS.close()
 
 SCRIPT = os.path.join(
     os.path.dirname(__file__), "..", "skills", "review-all", "scripts",
@@ -12,11 +19,11 @@ SCRIPT = os.path.join(
 
 
 def materialize(spec):
-    d = tempfile.mkdtemp()
+    d = TEMPS.enter_context(tempfile.TemporaryDirectory())
     fx = os.path.join(d, "fx.json")
-    with open(fx, "w") as f:
+    with open(fx, "w", encoding="utf-8") as f:
         json.dump(spec, f)
-    return subprocess.run([sys.executable, SCRIPT, fx], capture_output=True, text=True)
+    return subprocess.run([sys.executable, SCRIPT, fx, os.path.join(d, "repo")], capture_output=True, text=True)
 
 
 def git_diff(repo):
@@ -74,7 +81,7 @@ class TestMaterialize(unittest.TestCase):
                                      "seed_profile_cache": {"raw": raw}}})
         self.assertEqual(p.returncode, 0, p.stderr)
         repo = p.stdout.strip()
-        with open(os.path.join(repo, ".claude", "cache", "review-all-profile.json")) as f:
+        with open(os.path.join(repo, ".claude", "cache", "review-all-profile.json"), encoding="utf-8") as f:
             self.assertEqual(json.load(f), raw)
         self.assertNotIn("review-all-profile", git_diff(repo))
 
@@ -85,8 +92,8 @@ class TestMaterialize(unittest.TestCase):
                                      "seed_profile_cache": {"rules": "Never use eval"}}})
         self.assertEqual(p.returncode, 0, p.stderr)
         repo = p.stdout.strip()
-        discover = os.path.join(os.path.dirname(SCRIPT), "discover.sh")
-        out = subprocess.run(["bash", discover, repo], capture_output=True, text=True)
+        cli = os.path.join(os.path.dirname(SCRIPT), "..", "cli.py")
+        out = subprocess.run([sys.executable, cli, "--repo", repo, "discover"], capture_output=True, text=True)
         disc = json.loads(out.stdout)
         self.assertEqual(disc["cache"]["status"], "HIT", disc["cache"])
         self.assertEqual(disc["cachedProfile"]["rules"]["global"], "Never use eval")

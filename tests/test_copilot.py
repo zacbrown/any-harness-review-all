@@ -42,7 +42,7 @@ class Fixture(unittest.TestCase):
         self.git("-c", "commit.gpgsign=false", "commit", "-qm", "baseline")
         self.write("src/a.py", "value = 0\n")
         self.requirements = self.root / "requirements.txt"
-        self.requirements.write_text("value must be positive\n")
+        self.requirements.write_text("value must be positive\n", encoding="utf-8")
         self.profile = self.root / "profile.json"
         atomic(self.profile, {"language": "python", "rules": {"global": ""}})
         self.request_path = self.root / "request.json"
@@ -66,7 +66,7 @@ class Fixture(unittest.TestCase):
     def write(self, path, content):
         target = self.repo / path
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content)
+        target.write_text(content, encoding="utf-8")
         return target
 
     def prepare(self):
@@ -112,7 +112,7 @@ class Fixture(unittest.TestCase):
 class TestCopilotPackages(Fixture):
     def test_state_paths_reject_traversal_absolute_and_symlink_escapes(self):
         outside = self.root / "outside.json"
-        outside.write_text("preserve me")
+        outside.write_text("preserve me", encoding="utf-8")
         link = self.repo / ".copilot/review-all/link"
         link.parent.mkdir(parents=True)
         link.symlink_to(self.root, target_is_directory=True)
@@ -123,7 +123,7 @@ class TestCopilotPackages(Fixture):
                     self.write(".copilot/review-all.json", json.dumps({key: value}))
                     with self.assertRaises(ValueError):
                         self.prepare()
-                    self.assertEqual("preserve me", outside.read_text())
+                    self.assertEqual("preserve me", outside.read_text(encoding="utf-8"))
 
     def test_runtime_directory_cannot_be_a_symlink_outside_namespace(self):
         (self.repo / ".copilot").mkdir()
@@ -238,7 +238,7 @@ class TestCopilotPackages(Fixture):
         self.assertEqual(6, len(manifest["assignments"]))
         self.assertTrue(PACKAGE.fresh(directory))
         for assignment in manifest["assignments"].values():
-            payload = "".join(Path(p).read_text() for p in assignment["mandatory"])
+            payload = "".join(Path(p).read_text(encoding="utf-8") for p in assignment["mandatory"])
             for phrase in ("value must be positive", "Root rule.", "Only src.", "Python rule.", "3-question gate"):
                 self.assertIn(phrase, payload)
             self.assertTrue(all(Path(p).is_absolute() for p in assignment["mandatory"]))
@@ -267,12 +267,12 @@ class TestCopilotPackages(Fixture):
         policy["mode"] = "disabled"
         directory, manifest = self.prepare()
         self.assertFalse(any("content" in e for e in manifest["instructions"]))
-        self.assertNotIn("Verbatim", "".join(Path(p).read_text() for p in manifest["context"]["reviewInstructions"]))
+        self.assertNotIn("Verbatim", "".join(Path(p).read_text(encoding="utf-8") for p in manifest["context"]["reviewInstructions"]))
         self.assertTrue(PACKAGE.fresh(directory))
 
     def test_parent_sources_are_explicit_and_scoped(self):
         parent = self.root / "parent.md"
-        parent.write_text("Parent-only requirement\n")
+        parent.write_text("Parent-only requirement\n", encoding="utf-8")
         self.request["instructions"]["parentSources"] = [{
             "path": str(parent), "boundary": str(self.root), "files": ["src/a.py"], "enabled": True}]
         _, manifest = self.prepare()
@@ -301,9 +301,9 @@ class TestCopilotPackages(Fixture):
             with self.subTest(resource=resource):
                 directory, _ = self.prepare()
                 if resource == "requirements":
-                    self.requirements.write_text(self.requirements.read_text() + "\nchanged")
+                    self.requirements.write_text(self.requirements.read_text(encoding="utf-8") + "\nchanged", encoding="utf-8")
                 elif resource == "profile":
-                    self.profile.write_text('{"changed":true}')
+                    self.profile.write_text('{"changed":true}', encoding="utf-8")
                 elif resource == "config":
                     self.write(".copilot/review-all.json", "{}\n")
                 else:
@@ -323,7 +323,7 @@ class TestCopilotPackages(Fixture):
         self.write("src/a.py", "value = 999\n")
         self.request["target"] = {"kind": "staged"}
         directory, manifest = self.prepare()
-        data = "".join(Path(p).read_text() for p in manifest["sources"]["src/a.py"]["parts"])
+        data = "".join(Path(p).read_text(encoding="utf-8") for p in manifest["sources"]["src/a.py"]["parts"])
         self.assertEqual("value = 0\n", data)
         self.git("add", "src/a.py")
         with self.assertRaisesRegex(ValueError, "diff changed"):
@@ -395,7 +395,7 @@ class TestCopilotPackages(Fixture):
         _, manifest = self.prepare()
         source = manifest["sources"]["src/new.py"]
         self.assertEqual("index", source["revision"])
-        self.assertEqual("staged_new = True\n", "".join(Path(p).read_text() for p in source["parts"]))
+        self.assertEqual("staged_new = True\n", "".join(Path(p).read_text(encoding="utf-8") for p in source["parts"]))
 
     def test_canonical_chunks_and_full_byte_coverage(self):
         self.write("src/b.py", "value = 20\n")
@@ -415,7 +415,7 @@ class TestCopilotPackages(Fixture):
         check = manifest["checks"][2]
         self.assertEqual(7, check["exitCode"])
         self.assertEqual("FAIL", check["status"])
-        self.assertIn("FAILED", Path(check["output"][0]).read_text())
+        self.assertIn("FAILED", Path(check["output"][0]).read_text(encoding="utf-8"))
         verdict = self.finish_empty(directory, manifest)
         self.assertFalse(verdict["pass"])
         self.assertEqual("VERIFIED", verdict["blocking"][0]["confidence"])
@@ -477,10 +477,10 @@ class TestCopilotResults(Fixture):
         self.assertEqual(2, len(plan["assignments"]))
         for verifier in plan["assignments"].values():
             source = verifier["sources"]["support/limits.py"]
-            self.assertEqual("threshold = 1\n", "".join(Path(p).read_text() for p in source["parts"]))
+            self.assertEqual("threshold = 1\n", "".join(Path(p).read_text(encoding="utf-8") for p in source["parts"]))
             self.assertTrue(set(source["parts"]).issubset(verifier["mandatory"]))
             instruction_paths = [p for p in verifier["mandatory"] if "-instructions." in p]
-            scoped = json.loads("".join(Path(p).read_text() for p in instruction_paths))
+            scoped = json.loads("".join(Path(p).read_text(encoding="utf-8") for p in instruction_paths))
             rule = next(i for i in scoped if i["source"].endswith("/support/AGENTS.md"))
             self.assertEqual(["support/limits.py"], rule["files"])
             self.assertIn("Supporting scope rule.", rule["content"])
@@ -603,7 +603,7 @@ class TestCopilotResults(Fixture):
         dismissed[key] = {**dismissed["other:src/a.py:old-0"], "last_seen_at": "2025-01-01"}
         self.write(".copilot/review-all/state.json", json.dumps({"harness": "copilot", "findings": dismissed}))
         directory, manifest = self.prepare()
-        prompt_digest = json.loads("".join(Path(p).read_text() for p in manifest["context"]["dismissals"]))
+        prompt_digest = json.loads("".join(Path(p).read_text(encoding="utf-8") for p in manifest["context"]["dismissals"]))
         self.assertEqual(30, len(prompt_digest))
         self.assertNotIn(key, [d["root_cause_key"] for d in prompt_digest])
         assignment = next(iter(manifest["assignments"].values()))
@@ -656,9 +656,9 @@ class TestCopilotResults(Fixture):
         judgment = subprocess.CompletedProcess([], 0, stdout=b"PASS\n", stderr=b"")
         with patch.dict(os.environ, {"REVIEW_ALL_COPILOT_EVALS": "1"}), \
              patch.object(EVALS, "cli_version", return_value="1.0.95"), \
-             patch.object(EVALS, "run"), patch.object(EVALS.INSTALL, "install"), \
+             patch.object(EVALS, "run"), patch.object(EVALS.INSTALL, "install"), patch.object(EVALS.INSTALL, "provision"), \
              patch.object(EVALS.TALLY, "tally", return_value=([0, 0, 0, 0, 0], "comment")), \
-             patch.object(EVALS.subprocess, "run", side_effect=[report, judgment]) as launch, \
+             patch.object(EVALS, "process_run", side_effect=[report, judgment]) as launch, \
              patch.object(sys, "argv", ["run-evals-copilot.py", "01", "--out", str(self.root / "evals")]):
             self.assertEqual(0, EVALS.main())
         for call in launch.call_args_list:
@@ -685,7 +685,7 @@ class TestCopilotResults(Fixture):
         for attempt in (1, 2):
             dispatch = RESULTS.start(directory, assignment["id"])
             self.assertEqual(attempt, dispatch["attempt"])
-            output.write_text("not JSON")
+            output.write_text("not JSON", encoding="utf-8")
             status = RESULTS.accept(directory, assignment["id"], output)
             self.assertEqual("failed", status["status"])
             self.assertEqual(attempt == 1, status["retry"])
@@ -757,12 +757,12 @@ class TestCopilotInstallation(Fixture):
         destination = self.root / "project/.github"
         unrelated = destination / "agents/my-agent.md"
         unrelated.parent.mkdir(parents=True)
-        unrelated.write_text("mine")
+        unrelated.write_text("mine", encoding="utf-8")
         INSTALL.install(destination)
         profiles = list((destination / "agents").glob("review-all-*.agent.md"))
         self.assertEqual(11, len(profiles))
         for profile in profiles:
-            text = profile.read_text()
+            text = profile.read_text(encoding="utf-8")
             self.assertIn("include-custom-instructions: true", text)
             self.assertLessEqual(len(body(text)), 30000)
             header = text.split("---", 2)[1]
@@ -773,24 +773,24 @@ class TestCopilotInstallation(Fixture):
             if "consistency-history" not in profile.name:
                 self.assertNotIn('"execute"', header)
         skill = destination / "skills/review-all/SKILL.md"
-        self.assertIn("Native Copilot", skill.read_text())
+        self.assertIn("Native Copilot", skill.read_text(encoding="utf-8"))
         INSTALL.install(destination)
-        skill.write_text("local modifications")
+        skill.write_text("local modifications", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "locally modified"):
             INSTALL.install(destination)
         self.assertEqual(1, INSTALL.uninstall(destination))
-        self.assertEqual("local modifications", skill.read_text())
-        self.assertEqual("mine", unrelated.read_text())
+        self.assertEqual("local modifications", skill.read_text(encoding="utf-8"))
+        self.assertEqual("mine", unrelated.read_text(encoding="utf-8"))
 
     def test_collision_is_preflighted_before_writes(self):
         destination = self.root / "project/.github"
         conflict = destination / "agents/review-all-verifier.agent.md"
         conflict.parent.mkdir(parents=True)
-        conflict.write_text("not ours")
+        conflict.write_text("not ours", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "unowned"):
             INSTALL.install(destination)
         self.assertFalse((destination / "skills").exists())
-        self.assertEqual("not ours", conflict.read_text())
+        self.assertEqual("not ours", conflict.read_text(encoding="utf-8"))
 
     def test_generated_profile_preserves_explicit_overrides(self):
         files = INSTALL.assemble({"models": {"01-standards": "gpt-5.4-mini"}, "verifierModel": "gpt-5.4",

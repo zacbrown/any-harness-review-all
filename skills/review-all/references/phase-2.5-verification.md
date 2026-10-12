@@ -16,9 +16,8 @@ Lifecycle interactions with the steps below:
 
 Collect all findings from Phase 2 agents into a single JSON array, then pipe through the bundled script:
 
-```bash
-echo "$ALL_FINDINGS_JSON" | python3 scripts/dedupe.py \
-  --suggested-cap "${suggestedGlobalCap:-10}" --question-cap "${questionGlobalCap:-8}"
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" --input "<input.json>" dedupe    --suggested-cap 10 --question-cap 8
 ```
 
 Pass `--suggested-cap` / `--question-cap` from the `suggestedGlobalCap` / `questionGlobalCap` config keys (`config-keys.md`). Omit flags to use defaults. A cap of `0` disables that cap — keep every survivor of that tier.
@@ -81,11 +80,10 @@ Before reporting, scan history for the same `root_cause_key` appearing in 3+ rec
 
 After verification, hand lifecycle bookkeeping to the bundled script:
 
-```bash
+```text
 # seen-keys.json = JSON array of root_cause_keys kept + appendix this run
 # changed-keys.json (optional) = JSON array of keys whose underlying code hash changed
-STATE_SWEEP_CHANGED_KEYS=changed-keys.json \
-  python3 scripts/state-sweep.py .claude/review-all/state.json "$HEAD_SHA" seen-keys.json
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" state-sweep .claude/review-all/state.json "<HEAD>" seen-keys.json --changed-keys changed-keys.json
 ```
 
 The script applies the transitions documented in `state-file.md`: `snoozed → open` (expired), `open → fixed` (code changed AND not re-seen), `open → stale` (`miss_count >= 2` or >30 days unseen), `wontfix → open` (code changed), and `fixed/stale → open` (key re-surfaces this run = regression). It writes the file atomically and prints a one-line summary.

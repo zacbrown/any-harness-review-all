@@ -1,0 +1,1298 @@
+[
+  {
+    "gate": "check-agent-models",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "explicit .?model",
+    "label": "SKILL.md requires an explicit model on every spawn"
+  },
+  {
+    "gate": "check-agent-models",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "subagent_type",
+    "label": "SKILL.md pins the subagent type"
+  },
+  {
+    "gate": "check-agent-models",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "extraAgents.*spawns at .?sonnet|no .?model.*spawns at .?sonnet",
+    "label": "SKILL.md gives the default tier for a persona that declares none"
+  },
+  {
+    "gate": "check-agent-models",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "Model per axis",
+    "label": "phase-2-agents.md documents the per-axis model split"
+  },
+  {
+    "gate": "check-agent-models",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "spawns at .?sonnet",
+    "label": "phase-2-agents.md gives the extraAgents default"
+  },
+  {
+    "gate": "check-agent-models",
+    "path": "skills/review-all/references/config-keys.md",
+    "pattern": "persona frontmatter",
+    "label": "config-keys.md points verifierModel readers at the per-axis tiers"
+  },
+  {
+    "gate": "check-agent-models",
+    "path": "README.md",
+    "pattern": "Every spawn names its model",
+    "label": "README documents the per-axis model split"
+  },
+  {
+    "gate": "check-agent-models",
+    "path": "skills/review-all/references/config-keys.md",
+    "pattern": "no .?.?inherit.?.? value",
+    "label": "config-keys.md records why verifierModel has no inherit"
+  },
+  {
+    "gate": "check-agent-models",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "verifierModel",
+    "label": "verifier.md names the config tier it spawns at"
+  },
+  {
+    "gate": "check-agent-models",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Every Phase 4 spawn names its model",
+    "label": "phase-4-menu.md states the Phase 4 spawn contract"
+  },
+  {
+    "gate": "check-agent-models",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "Phase 4 spawn",
+    "label": "SKILL.md extends the spawn contract to Phase 4"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "checkpoint(?:\\.py)? load",
+    "label": "SKILL.md loads checkpoints before spawning"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "resolved, FILTERED diff",
+    "label": "the key is computed on the filtered diff, not the raw range"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "RESOLVED, FILTERED diff",
+    "label": "phase-2-agents.md repeats the filtered-diff rule"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "checkpoint(?:\\.py)? save",
+    "label": "SKILL.md saves each axis on return"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "do \\*\\*NOT\\*\\* spawn it",
+    "label": "resumed axes are not re-spawned"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "timed out, errored, returned malformed output",
+    "label": "only complete returns are checkpointed"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "empty findings array is a legitimate result",
+    "label": "[] is a real result, not a miss"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "counts as returned",
+    "label": "Phase 2.75 treats a resumed axis as returned"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "incomplete installation",
+    "label": "checkpointing is optional, never load-bearing"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "HEAD",
+    "label": "key covers HEAD ($(basename $doc))"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "HEAD",
+    "label": "key covers HEAD ($(basename $doc))"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "diff bytes",
+    "label": "key covers the exact diff ($(basename $doc))"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "diff bytes",
+    "label": "key covers the exact diff ($(basename $doc))"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "personas",
+    "label": "key covers the agent personas ($(basename $doc))"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "personas",
+    "label": "key covers the agent personas ($(basename $doc))"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "REVIEW\\.md",
+    "label": "key covers REVIEW.md ($(basename $doc))"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "REVIEW\\.md",
+    "label": "key covers REVIEW.md ($(basename $doc))"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "Checkpoint resume",
+    "label": "checkpoint section present"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "all-or-nothing",
+    "label": "no partial or fuzzy key match"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "pre-dedupe, pre-verification",
+    "label": "stored as returned, before verification"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "independent of .state\\.json",
+    "label": "checkpoint store is not the lifecycle store"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "Stale files are deleted",
+    "label": "stale checkpoints are dropped, not kept"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/references/phase-3-report.md",
+    "pattern": "Resumed from checkpoint",
+    "label": "report names the resumed axes"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/references/config-keys.md",
+    "pattern": "checkpointDir",
+    "label": "checkpointDir documented in the key table"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/scripts/checkpoint.py",
+    "pattern": "runKey = sha256",
+    "label": "script documents the key composition"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "skills/review-all/scripts/checkpoint.py",
+    "pattern": "os\\.replace",
+    "label": "script writes atomically"
+  },
+  {
+    "gate": "check-checkpoint",
+    "path": "README.md",
+    "pattern": "checkpoints",
+    "label": "README documents the feature"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "Claim classes",
+    "label": "shared: Claim classes section"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "Admissible proof",
+    "label": "shared: admissible-proof column"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "\\*\\*Static\\*\\*",
+    "label": "shared: static class"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "\\*\\*Runtime\\*\\*",
+    "label": "shared: runtime class"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "\\*\\*Data\\*\\*",
+    "label": "shared: data class"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "\\*\\*Rendering\\*\\*",
+    "label": "shared: rendering class"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "UNVERIFIED — would need",
+    "label": "shared: missing-observation phrasing"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "never 🔴/🟠",
+    "label": "shared: severity cap on unbacked claims"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "build the observation",
+    "label": "shared: attempt the observation before capping"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "not out of reach",
+    "label": "shared: a missing test framework is not an excuse"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "The .unverified. verdict",
+    "label": "verifier: unverified verdict section"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "\"claim_class\"",
+    "label": "verifier: claim_class output field"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "\"needs_observation\"",
+    "label": "verifier: needs_observation output field"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "\"drop\" \\| \"unverified\"",
+    "label": "verifier: verdict enum includes unverified"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "Never assign 🔴/🟠 to an .unverified. finding",
+    "label": "verifier: no top severity when unobserved"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "methodologically independent",
+    "label": "verifier: cross-agent bonus independence"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "correlated-evidence",
+    "label": "verifier: correlated-evidence marker"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/references/phase-2.5-verification.md",
+    "pattern": "orthogonal to the score bands",
+    "label": "verify: unverified is not a fourth band"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/references/phase-2.5-verification.md",
+    "pattern": "They are never dropped",
+    "label": "verify: unverified never dropped"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/references/phase-2.5-verification.md",
+    "pattern": "any voter marks .unverified. stays .unverified.",
+    "label": "verify: vote interaction"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/references/phase-2.5-verification.md",
+    "pattern": "command run this session",
+    "label": "verify: VERIFIED fast path needs provenance"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/references/phase-3-report.md",
+    "pattern": "🔬 Unverified",
+    "label": "report: unverified section heading"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/references/phase-3-report.md",
+    "pattern": "\\| Gate \\| Result \\| Provenance \\| Details \\|",
+    "label": "report: gate table Provenance column"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/references/phase-3-report.md",
+    "pattern": "may not be rendered .PASS.",
+    "label": "report: no PASS without provenance"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/references/phase-3-report.md",
+    "pattern": "never merge into a severity tier",
+    "label": "report: unverified stays out of tiers"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "keep./.appendix./.drop./.unverified",
+    "label": "SKILL: Phase 2.75 verdict enum includes unverified"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "needs_observation",
+    "label": "SKILL: needs_observation required when unverified"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "orthogonal to those bands",
+    "label": "SKILL: unverified orthogonal to score bands"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "no 🔬 unverified findings",
+    "label": "SKILL: menu-skip accounts for unverified"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "PASS requires a command you executed",
+    "label": "SKILL: gate PASS provenance rule"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "stale-dev-server",
+    "label": "SKILL: dev-server liveness proof"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/references/phase-gate.md",
+    "pattern": "Exclude every .unverified. finding",
+    "label": "gate: unverified excluded from gateable set"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "skills/review-all/references/phase-gate.md",
+    "pattern": "No blocking on an .unverified. finding",
+    "label": "gate: unverified never blocks"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "README.md",
+    "pattern": "unverified",
+    "label": "README: unverified verdict mentioned"
+  },
+  {
+    "gate": "check-claim-class",
+    "path": "README.md",
+    "pattern": "Provenance",
+    "label": "README: gate provenance mentioned"
+  },
+  {
+    "gate": "check-diff-order",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "Per-agent diff ordering",
+    "label": "ordering section present"
+  },
+  {
+    "gate": "check-diff-order",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "agent-order\\.py",
+    "label": "ordering script named"
+  },
+  {
+    "gate": "check-diff-order",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "sha256",
+    "label": "reproducible content-addressed permutation"
+  },
+  {
+    "gate": "check-diff-order",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "Hunks within a file are NEVER reordered",
+    "label": "never-reorder-hunks rule"
+  },
+  {
+    "gate": "check-diff-order",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "Chunk composition is computed on the canonical .git. order first",
+    "label": "chunk-composition-canonical rule"
+  },
+  {
+    "gate": "check-diff-order",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "slice holds ≥ 3 files",
+    "label": "3-file threshold"
+  },
+  {
+    "gate": "check-diff-order",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "verifier is unaffected",
+    "label": "verifier order-independence"
+  },
+  {
+    "gate": "check-diff-order",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "blame. block moves with its file",
+    "label": "attached context travels with its file"
+  },
+  {
+    "gate": "check-diff-order",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "agent-order\\.py",
+    "label": "SKILL.md calls the ordering script"
+  },
+  {
+    "gate": "check-diff-order",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "ONCE with the union of changed files",
+    "label": "single call per review"
+  },
+  {
+    "gate": "check-diff-order",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "hunks inside a file are never reordered",
+    "label": "SKILL.md restates the hunk rule"
+  },
+  {
+    "gate": "check-diff-order",
+    "path": "skills/review-all/scripts/agent-order.py",
+    "pattern": "Filter-stable",
+    "label": "script documents filter stability"
+  },
+  {
+    "gate": "check-diff-order",
+    "path": "skills/review-all/scripts/agent-order.py",
+    "pattern": "Never reorders hunks within a file",
+    "label": "script documents file-level-only scope"
+  },
+  {
+    "gate": "check-diff-order",
+    "path": "README.md",
+    "pattern": "agent-order\\.py",
+    "label": "README mentions the ordering feature"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "Dismissed-finding digest",
+    "label": "SKILL: digest build heading"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "previously_dismissed",
+    "label": "SKILL: <previously_dismissed> tag"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "status: wontfix",
+    "label": "SKILL: sources wontfix entries"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "snoozed_until",
+    "label": "SKILL: sources non-expired snoozed entries"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "Step 2.5.0 central drop stays the guarantee",
+    "label": "SKILL: central-drop remains the guarantee"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "diff-membership",
+    "label": "SKILL: diff-membership match (not a recomputed hash)"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "Previously-dismissed findings",
+    "label": "shared: handling section heading"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "unchanged in this diff",
+    "label": "shared: suppress only when location unchanged"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "dismissal may no longer hold",
+    "label": "shared: changed location re-raises"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "Step 2.5.0 central filter still drops",
+    "label": "shared: central filter remains the guarantee"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "previously_dismissed",
+    "label": "agents: digest now in agent inputs"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/references/phase-2-agents.md",
+    "pattern": "reverses the earlier",
+    "label": "agents: explicit reversal of prior stance"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "status: rejected",
+    "label": "SKILL: sources rejected entries too"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "REJECTED score",
+    "label": "SKILL: machine rejections render with their own label"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "Machine rejections",
+    "label": "shared: machine rejections named as a distinct kind"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "That is a score, not a decision",
+    "label": "shared: score-vs-decision distinction"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "never suppresses a",
+    "label": "shared: CRITICAL carve-out on machine rejections"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/references/state-file.md",
+    "pattern": "Machine rejections vs\\. human dismissals",
+    "label": "state-file: the asymmetry section"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/references/state-file.md",
+    "pattern": "rejected",
+    "label": "state-file: rejected status documented"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/references/state-file.md",
+    "pattern": "verifier_version",
+    "label": "state-file: rejections keyed on verifier version"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/references/state-file.md",
+    "pattern": "code-hash\\.py",
+    "label": "state-file: one code_hash implementation"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/references/phase-2.5-verification.md",
+    "pattern": "previously-rejected findings",
+    "label": "verify: Step 2.5.0 skip log line"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "skills/review-all/references/phase-2.5-verification.md",
+    "pattern": "never recorded as .rejected.",
+    "label": "verify: unverified is not a refutation"
+  },
+  {
+    "gate": "check-dismissed-digest",
+    "path": "README.md",
+    "pattern": "previously_dismissed",
+    "label": "README: digest mentioned"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "gate_results",
+    "label": "gate_results block defined"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "\\*\\*Failures only\\*\\*",
+    "label": "failures-only rule"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "20 lines or 2 000 characters per gate and 4 000 characters total",
+    "label": "truncation caps"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "lead, not a finding",
+    "label": "lead-not-a-finding rule"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "Never restate gate output as a finding",
+    "label": "no-restating rule"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "^version: 7$",
+    "label": "verifier version bumped to 7"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "gate_results",
+    "label": "verifier receives gate_results"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "corroborating_agents",
+    "label": "verifier receives corroborating_agents"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "never a substitute for verification",
+    "label": "corroboration is not proof"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "Agreement is not independence",
+    "label": "correlation caveat"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "feeds no scoring bonus",
+    "label": "rubric deliberately untouched"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "skills/review-all/references/phase-2.5-verification.md",
+    "pattern": "corroborating_agents",
+    "label": "verification doc lists corroborating_agents"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "skills/review-all/references/phase-2.5-verification.md",
+    "pattern": "gate_results",
+    "label": "verification doc lists gate_results"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "skills/review-all/scripts/dedupe.py",
+    "pattern": "corroborating_agents",
+    "label": "dedupe emits corroborating_agents"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "skills/review-all/references/phase-3-report.md",
+    "pattern": "Flagged independently by",
+    "label": "report renders the corroboration count"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "README.md",
+    "pattern": "Flagged independently by N agents",
+    "label": "README documents the corroboration count"
+  },
+  {
+    "gate": "check-gate-results",
+    "path": "README.md",
+    "pattern": "gate_results",
+    "label": "README documents the gate_results block"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "MUST present the Phase 4 menu in the SAME turn",
+    "label": "mandatory-menu gate sentence"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "every report section reads .None found",
+    "label": "only-skip condition"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "no appendix AND no 🔬 unverified findings \\(no 🔴",
+    "label": "only-skip condition includes unverified clause (Phase 4 gate)"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "skip it only when every section says .None found\\.. and there is no appendix and no 🔬 unverified",
+    "label": "only-skip condition includes unverified clause (Important Rule 2)"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "Report-before-menu ordering",
+    "label": "report-before-menu ordering rule"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "zero tool calls between the report text and the menu call",
+    "label": "zero-tool-calls-between sentence"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "Full report above",
+    "label": "verdict summary in menu question text"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "Bash\\(gh pr comment:\\*\\)",
+    "label": "allowed-tools: gh pr comment"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "Bash\\(gh issue create:\\*\\)",
+    "label": "allowed-tools: gh issue create"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "Fix by scope",
+    "label": "primary mode: Fix by scope"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "Triage one-by-one",
+    "label": "primary mode: Triage one-by-one"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "More actions",
+    "label": "primary mode: More actions"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "Skip / done",
+    "label": "primary mode: Skip / done"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Fix by scope",
+    "label": "Mode A: Fix by scope"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Triage one-by-one",
+    "label": "Mode B: Triage one-by-one"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "More actions",
+    "label": "Mode C: More actions"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Skip / done",
+    "label": "Skip / done (dominant terminator)"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "array too_big",
+    "label": ">4-findings cap crash warning"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "caps option",
+    "label": "AskUserQuestion 4-option cap note"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "C = .*Critical",
+    "label": "Custom expression grammar legend"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Ask a follow-up question",
+    "label": "action: Ask a follow-up question"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Generate tests",
+    "label": "action: Generate tests"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Create a ticket",
+    "label": "action: Create a ticket/issue"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Export findings",
+    "label": "action: Export findings (JSON + SARIF)"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Report-before-menu ordering",
+    "label": "report-before-menu ordering rule"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "zero tool calls between the report text and the menu call",
+    "label": "zero-tool-calls-between sentence"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Full report above",
+    "label": "verdict summary in menu question text"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "no appendix AND no 🔬 unverified findings \\(nothing scoring",
+    "label": "only-skip condition includes unverified clause (mandatory-menu gate)"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "no appendix AND no 🔬 unverified findings → skip Phase 4",
+    "label": "only-skip condition includes unverified clause (assembly algorithm)"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Fix this",
+    "label": "triage verb: Fix this"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Ask a question",
+    "label": "triage verb: Ask a question"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Create ticket",
+    "label": "triage verb: Create ticket"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Snooze",
+    "label": "triage verb: Snooze"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Wontfix",
+    "label": "triage verb: Wontfix"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "Skip .* next",
+    "label": "triage verb: Skip -> next"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "caps at 4",
+    "label": "triage drill-down 4-cap resolution note"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "never create new files.*auto",
+    "label": "new-files guardrail scoped to auto-fix"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-4-menu.md",
+    "pattern": "issue-<finding>-",
+    "label": "Create-ticket Tier-3 markdown fallback"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-3-report.md",
+    "pattern": "Merge-readiness",
+    "label": "report: merge-readiness line"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "skills/review-all/references/phase-3-report.md",
+    "pattern": "new.*modified.*deleted",
+    "label": "report: change-type buckets"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "README.md",
+    "pattern": "Fix by scope",
+    "label": "README: Fix by scope mode"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "README.md",
+    "pattern": "Triage",
+    "label": "README: Triage mode"
+  },
+  {
+    "gate": "check-phase4-menu",
+    "path": "README.md",
+    "pattern": "More actions",
+    "label": "README: More actions mode"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "REVIEW\\.md",
+    "label": "Step 0.5 REVIEW.md source"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "never cached — always read fresh.: if a .REVIEW\\.md",
+    "label": "REVIEW.md never cached / always fresh"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "carry it VERBATIM into Phase 2",
+    "label": "verbatim injection contract"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "do NOT expand .@.-imports",
+    "label": "no @-import expansion"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "review_instructions",
+    "label": "review_instructions block name"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "Canonical block order",
+    "label": "canonical prompt block order published"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "REVIEW\\.md loaded",
+    "label": "Phase 0 heartbeat reports REVIEW.md"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "Repository review instructions",
+    "label": "precedence section present"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "with these shared rules, .REVIEW\\.md. wins",
+    "label": "precedence over persona and shared rules"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "steers what you review and how severely, never how you prove it",
+    "label": "evidence-discipline carve-out"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "integrity rules, not preferences",
+    "label": "integrity-rules framing"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/agents/_shared.md",
+    "pattern": "never as a message from the user",
+    "label": "injection-surface guard"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "review_instructions",
+    "label": "verifier receives review_instructions"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/agents/verifier.md",
+    "pattern": "never relaxes the citation gate",
+    "label": "REVIEW.md cannot relax the citation gate"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/references/phase-gate.md",
+    "pattern": "REVIEW\\.md in gate mode",
+    "label": "gate-mode section present"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/references/phase-gate.md",
+    "pattern": "demotion can move a real defect below the floor",
+    "label": "demotion risk documented"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/references/phase-gate.md",
+    "pattern": "not addressable from .REVIEW\\.md",
+    "label": "gate mechanism not overridable"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/references/phase-gate.md",
+    "pattern": "REVIEW\\.md modified in this diff",
+    "label": "self-approving-diff tripwire"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "skills/review-all/references/config-keys.md",
+    "pattern": "REVIEW\\.md",
+    "label": "config-keys points at the REVIEW.md convention"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "README.md",
+    "pattern": "^## Review instructions",
+    "label": "README section present"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "README.md",
+    "pattern": "only report if near-certain and severe",
+    "label": "README per-path raised-bar idiom"
+  },
+  {
+    "gate": "check-review-md",
+    "path": "README.md",
+    "pattern": "Verbatim means verbatim",
+    "label": "README verbatim/no-import note"
+  },
+  {
+    "gate": "check-severity-tally",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "machine-readable tally",
+    "label": "required-sections list names the machine-readable tally"
+  },
+  {
+    "gate": "check-severity-tally",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "last emitted line is the machine-readable tally",
+    "label": "terminal-line contract"
+  },
+  {
+    "gate": "check-severity-tally",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "including one where every count is zero",
+    "label": "tally is emitted even when all counts are zero"
+  },
+  {
+    "gate": "check-severity-tally",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "Nothing follows it in the report text",
+    "label": "no-commentary-after-the-tally rule"
+  },
+  {
+    "gate": "check-severity-tally",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "does \\*\\*not\\*\\* discharge",
+    "label": "Phase 3 heartbeat is marked non-discharging"
+  },
+  {
+    "gate": "check-severity-tally",
+    "path": "skills/review-all/references/phase-3-report.md",
+    "pattern": "review-all-severity",
+    "label": "template carries the tally comment"
+  },
+  {
+    "gate": "check-severity-tally",
+    "path": "skills/review-all/references/phase-3-report.md",
+    "pattern": "Emit it on every run",
+    "label": "tally is unconditional"
+  },
+  {
+    "gate": "check-severity-tally",
+    "path": "skills/review-all/references/phase-3-report.md",
+    "pattern": "Nothing follows",
+    "label": "no-commentary-after-the-tally rule"
+  },
+  {
+    "gate": "check-severity-tally",
+    "path": "skills/review-all/references/phase-3-report.md",
+    "pattern": "neither is parseable",
+    "label": "prose counts do not substitute for the comment"
+  },
+  {
+    "gate": "check-severity-tally",
+    "path": "skills/review-all/scripts/evaluation.py",
+    "pattern": "SCORE,.*MISSING|\"MISSING\"",
+    "label": "runner reports a missing tally instead of skipping it"
+  },
+  {
+    "gate": "check-severity-tally",
+    "path": "README.md",
+    "pattern": "review-all-severity",
+    "label": "README documents the machine-readable tally"
+  },
+  {
+    "gate": "check-verifier-votes",
+    "path": "skills/review-all/references/config-keys.md",
+    "pattern": "\\| .verifierVotes. \\| .number. \\| .1. \\|",
+    "label": "verifierVotes row with default 1"
+  },
+  {
+    "gate": "check-verifier-votes",
+    "path": "skills/review-all/references/config-keys.md",
+    "pattern": "majority-vote",
+    "label": "config: majority-vote semantics"
+  },
+  {
+    "gate": "check-verifier-votes",
+    "path": "skills/review-all/references/config-keys.md",
+    "pattern": "Only 🔴/🟠 are re-voted",
+    "label": "config: top-severity scoping"
+  },
+  {
+    "gate": "check-verifier-votes",
+    "path": "skills/review-all/references/phase-2.5-verification.md",
+    "pattern": "Step 2.5b-vote",
+    "label": "verify: Step 2.5b-vote heading"
+  },
+  {
+    "gate": "check-verifier-votes",
+    "path": "skills/review-all/references/phase-2.5-verification.md",
+    "pattern": "Skip this step entirely when .verifierVotes",
+    "label": "verify: skip-when-1 guard"
+  },
+  {
+    "gate": "check-verifier-votes",
+    "path": "skills/review-all/references/phase-2.5-verification.md",
+    "pattern": "⌈.verifierVotes. / 2⌉",
+    "label": "verify: majority keep rule"
+  },
+  {
+    "gate": "check-verifier-votes",
+    "path": "skills/review-all/references/phase-2.5-verification.md",
+    "pattern": "never re-voted",
+    "label": "verify: DEBT/SUGGESTED/QUESTION excluded"
+  },
+  {
+    "gate": "check-verifier-votes",
+    "path": "skills/review-all/references/phase-2.5-verification.md",
+    "pattern": "median",
+    "label": "verify: median score rule"
+  },
+  {
+    "gate": "check-verifier-votes",
+    "path": "skills/review-all/references/phase-2.5-verification.md",
+    "pattern": "no shared context",
+    "label": "verify: independence of extra votes"
+  },
+  {
+    "gate": "check-verifier-votes",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "verifierVotes",
+    "label": "SKILL: Phase 2.5 verifierVotes pointer"
+  },
+  {
+    "gate": "check-verifier-votes",
+    "path": "skills/review-all/SKILL.md",
+    "pattern": "Step 2.5b-vote",
+    "label": "SKILL: pointer to the vote step"
+  },
+  {
+    "gate": "check-verifier-votes",
+    "path": "README.md",
+    "pattern": "verifierVotes",
+    "label": "README: verifierVotes mentioned"
+  }
+]

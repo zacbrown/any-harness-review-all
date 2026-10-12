@@ -89,7 +89,7 @@ class TestGateVerdict(unittest.TestCase):
             p = run([CRIT], ["--severity", "critical", "--out", out_path,
                              "--reviewed-sha", "abc123", "--timestamp", TS])
             self.assertEqual(p.returncode, 1, p.stderr)
-            with open(out_path) as fh:
+            with open(out_path, encoding="utf-8") as fh:
                 disk = json.load(fh)
             self.assertEqual(disk["reviewedSha"], "abc123")
             self.assertFalse(disk["pass"])

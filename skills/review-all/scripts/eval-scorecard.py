@@ -46,7 +46,7 @@ def load_cases(evals_dir):
         if not name.endswith(".json"):
             continue
         try:
-            with open(os.path.join(evals_dir, name)) as fh:
+            with open(os.path.join(evals_dir, name), encoding="utf-8") as fh:
                 data = json.load(fh)
         except (OSError, json.JSONDecodeError):
             continue
@@ -204,7 +204,7 @@ def main(argv):
         else:
             path = argv[i]
             i += 1
-    src = open(path) if path else sys.stdin
+    src = open(path, encoding="utf-8") if path else sys.stdin
     try:
         results, scores = parse_lines(src)
     finally:
