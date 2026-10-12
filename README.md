@@ -5,18 +5,29 @@
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2)](https://code.claude.com/docs/en/plugins)
 
-Multi-agent code review for [Claude Code](https://code.claude.com/docs/en/overview), for any language or stack. It runs the repo's own typecheck/lint/tests, has up to ten review agents read the diff in parallel, then has a separate verifier re-check every finding before it reaches the report.
+Multi-agent code review for [Claude Code](https://code.claude.com/docs/en/overview) and native [GitHub Copilot CLI](docs/COPILOT.md), for any language or stack. It runs the repo's own typecheck/lint/tests, has up to ten review agents read the diff in parallel, then has a separate verifier re-check every finding before it reaches the report.
 
 ![/review-all report](docs/demo.png)
 
 ## Install
+
+Install [just](https://just.systems/) to use the checkout's installation recipes.
+Run `just` to list them.
+
+**Copilot CLI:** `just install-copilot` installs the native skill and eleven
+custom profiles under `~/.copilot/`. For a project, use
+`just install-copilot-project /path/to/repo`. Requires CLI >=1.0.95.
+See [Copilot support](docs/COPILOT.md) for configuration, explicit context
+handoffs, permissions, headless wrapper, opt-in integration tests and limitations.
+
+**Claude Code** (existing installation and behavior):
 
 ```
 /plugin marketplace add ncoevoet/claude-review-all
 /plugin install review-all@ncoevoet-review-all
 ```
 
-Or, to hack on the skill: `git clone` this repo and run `make install`, which copies `skills/review-all/` to `~/.claude/skills/review-all/` (`make uninstall` removes it).
+Or, to hack on the skill: `git clone` this repo and run `just install`, which copies `skills/review-all/` to `~/.claude/skills/review-all/` (`just uninstall` removes it).
 
 Requires Claude Code, `git`, `bash`, `python3`. `gh` is optional: it is used for `PR #N` targets and for the post-to-PR / create-issue actions.
 
@@ -41,6 +52,11 @@ Requires Claude Code, `git`, `bash`, `python3`. `gh` is optional: it is used for
 ```
 
 ## How it works
+
+The model tiers and `.claude/` paths below describe the Claude adapter. Copilot
+uses the same canonical review methodology with explicit model IDs,
+`.copilot/` state, named custom agents, and validated file-backed inputs;
+see [adapter differences](docs/COPILOT.md#invocation-and-configuration).
 
 1. **Discover.** One script (`scripts/discover.sh`) detects the toolchain, test layout and available tools. Rules extracted from `CLAUDE.md` are cached; toolchain data is re-probed every run.
 2. **Deterministic gates.** Typecheck, lint and scoped tests run in parallel. New public code without a test is flagged. A failing gate becomes a finding directly, and its output is passed to the agents as a `<gate_results>` block.
@@ -112,7 +128,7 @@ The skill grew out of several years of daily use of Claude for code review on re
 - a check that no real project names appear in fixtures;
 - eval schema validation;
 - shellcheck;
-- 13 Python unit-test files;
+- 14 Python unit-test files, including deterministic Copilot handoff/installation/gate tests;
 - 14 `tests/check-*.sh` doc gates.
 
 Behavior that exists only as instructions cannot be run headlessly, so each doc gate greps the docs for the key sentence. Each gate was checked by deleting that sentence on a scratch copy and confirming the gate fails.
@@ -140,7 +156,7 @@ To add a language, or tighten an existing pack:
 2. Add the glob to `rule_packs` in `skills/review-all/scripts/file-classes.json`, above the `**/*` catch-all.
 3. Run `bash tests/check-rule-packs.sh`.
 
-There is no per-project pack directory: packs are part of the skill. Make the change in a clone and `make install` it, or send a PR. Edits made inside the plugin cache are lost when the plugin updates. For rules that apply to one project only, use `REVIEW.md` or `CLAUDE.md`.
+There is no per-project pack directory: packs are part of the skill. Make the change in a clone and `just install` it, or send a PR. Edits made inside the plugin cache are lost when the plugin updates. For rules that apply to one project only, use `REVIEW.md` or `CLAUDE.md`.
 
 ### Custom agents
 
@@ -184,7 +200,7 @@ If the repo has a `.codegraph/` index and a CodeGraph MCP server is connected, a
 - Costs more tokens than a single-pass review, because both the agents and the verifier run.
 - The Haiku verifier can mis-score a new kind of pattern and push a real finding to the appendix. `verifierModel: "sonnet"` or `verifierVotes: 3` reduce this.
 - `state.json` is per repo and per machine. It is not shared across a team.
-- Claude Code only: it needs git, bash and filesystem access.
+- Both CLI adapters need git, bash and filesystem access; they are not web-chat uploads. Copilot-specific limits are documented [separately](docs/COPILOT.md#remaining-limits).
 
 ## Development
 

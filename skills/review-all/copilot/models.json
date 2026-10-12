@@ -1,0 +1,5 @@
+{
+  "default": "gpt-6.1-sol",
+  "reasoningEffort": "high",
+  "roles": {}
+}
