@@ -258,6 +258,34 @@ class Entrypoints(NativeCase):
         self.assertEqual("unrelated", unrelated.read_text(encoding="utf-8"))
         self.assertFalse((tool / "pyproject.toml").exists())
 
+    def test_plugin_runtime_is_self_contained_and_requires_explicit_setup(self):
+        from copilot_common import load_module
+        installer = load_module("copilot-install")
+        tool = self.root / "installed plugin"
+        for name, content in installer.tool_files().items():
+            target = tool / Path(name).relative_to(".review-all-tool")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+        entry = tool / ".github/plugin/skills/review-all"
+        self.assertEqual(tool, (entry / "../../../..").resolve())
+        cli = tool / "skills/review-all/cli.py"
+        repo = self.repo()
+        result = subprocess.run([sys._base_executable, str(cli), "preflight"], cwd=repo,
+                                capture_output=True, timeout=30)
+        self.assertEqual(2, result.returncode)
+        self.assertIn(b"incomplete or stale tool environment", result.stderr)
+        self.assertFalse((tool / ".venv").exists())
+        setup = subprocess.run([sys._base_executable, str(cli), "setup"], cwd=repo,
+                               capture_output=True, timeout=180)
+        self.assertEqual(0, setup.returncode, setup.stderr)
+        result = self.command("--repo", str(repo), "discover", "--harness", "copilot", tool=tool, cwd=repo)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(str(repo), json.loads(result.stdout)["repo"])
+        self.assertFalse((repo / ".venv").exists())
+        self.assertFalse((repo / "uv.lock").exists())
+        result = self.command("test", "--pattern", "test_copilot_plugin.py", tool=tool, cwd=repo)
+        self.assertEqual(0, result.returncode, result.stderr)
+
     def test_gate_verdict_contract_through_uv_and_just(self):
         repo = self.repo()
         source = repo / "source.py"

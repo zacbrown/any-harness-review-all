@@ -27,7 +27,7 @@ def tool_files():
     files = {}
     for name in ("pyproject.toml", "uv.lock", "justfile", "README.md", "LICENSE"):
         files[".review-all-tool/" + name] = (root / name).read_bytes()
-    for directory in (root / "skills", root / "tests", root / "docs"):
+    for directory in (root / "skills", root / "tests", root / "docs", root / ".github/plugin"):
         for path in sorted(directory.rglob("*")):
             if (path.is_file() and not path.is_symlink() and "__pycache__" not in path.parts
                     and path.suffix in {".py", ".json", ".md", ".txt"}
@@ -49,7 +49,18 @@ def assemble(config=None, harness="copilot"):
     if harness == "claude":
         return files
     files["skills/review-all/SKILL.md"] = (SKILL / "copilot/SKILL.md").read_bytes()
-    files["skills/review-all/references/workflow.md"] = adapt(body((SKILL / "SKILL.md").read_text(encoding="utf-8"))).encode()
+    files["skills/review-all/references/workflow.md"] = workflow_text().encode()
+    files.update(profiles(config))
+    return files
+
+
+def workflow_text():
+    return adapt(body((SKILL / "SKILL.md").read_text(encoding="utf-8")))
+
+
+def profiles(config=None):
+    config = config or {}
+    files = {}
     shared = adapt(body((SKILL / "agents/_shared.md").read_text(encoding="utf-8")))
     shared_gate = "## 3-question gate\n" + shared.split("## 3-question gate\n", 1)[1].split("\n## ", 1)[0]
     protocol = (SKILL / "copilot/dispatch.md").read_text(encoding="utf-8")
@@ -77,7 +88,7 @@ def assemble(config=None, harness="copilot"):
             "It contains the canonical severity, quotas, claim classes, dismissal, "
             "evidence, and exploration rules, resolved for this run.\n")
         text = f"---\n{frontmatter}\n---\n\n{role_protocol}\n\n{persona}\n\n{reviewer_guidance}"
-        text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+        text = re.sub(r"<!--.*?-->", "", text, flags=re.S).rstrip() + "\n"
         if len(body(text)) > 30000:
             raise ValueError(f"{axis} exceeds Copilot's 30,000-character profile limit")
         files[f"agents/{agent_id(axis)}.agent.md"] = text.encode()

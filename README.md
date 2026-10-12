@@ -12,13 +12,30 @@ Multi-agent code review for [Claude Code](https://code.claude.com/docs/en/overvi
 ## Install
 
 Requires installed Python >=3.11, uv, and Git. [Just](https://just.systems/)
->=1.33 is optional for named tasks. From the checkout run **`just setup`**,
-then `just install` (Claude) or `just install-copilot`. Run `just` for help.
+>=1.33 is optional for named tasks.
+
+**Copilot marketplace plugin:** this repository is packaged for
+[zbrown-copilot-marketplace](https://github.com/zacbrown/zbrown-copilot-marketplace).
+Once the [catalog entry](docs/COPILOT.md#marketplace-registration) is published:
+
+```text
+copilot plugin marketplace add zacbrown/zbrown-copilot-marketplace
+copilot plugin install review-all@zbrown-copilot-marketplace
+```
+
+The plugin supplies the native skill and all twelve custom profiles. Run the
+[one-time runtime setup](docs/COPILOT.md#marketplace-plugin) in the installed
+plugin directory before reviewing, and repeat it after updates. Copilot does
+not run Python setup during plugin installation. Remove any manual Copilot
+installation first so it does not shadow the plugin.
+
+**From a checkout:** run **`just setup`**, then `just install` (Claude) or
+`just install-copilot` (manual Copilot installation). Run `just` for help.
 Setup is explicit; normal reviews never sync dependencies or download Python.
 See the [shared CLI contract](skills/review-all/references/cli.md) for direct
 uv invocation without just, all command interfaces, platform limits and evidence.
 
-**Copilot CLI:** `just install-copilot` installs the native skill and twelve
+**Manual Copilot CLI install:** `just install-copilot` installs the native skill and twelve
 custom profiles under `~/.copilot/`. For a project, use
 `just install-copilot-project /path/to/repo`. Requires CLI >=1.0.95.
 See [Copilot support](docs/COPILOT.md) for configuration, explicit context
@@ -27,7 +44,7 @@ handoffs, permissions, headless wrapper, opt-in integration tests and limitation
 **Claude Code:** `just install` installs under `~/.claude/`; `just uninstall`
 removes unchanged owned files and preserves local edits. Both harness installers
 ship the package, lockfile, tasks, resources and tool environment as a complete
-unit. Old marketplace copies need migration with this installer; merely copying
+unit. Old Claude marketplace copies need migration with this installer; merely copying
 SKILL.md does not provision the runtime. `gh` is optional for PR targets and
 publication. Neither supported workflow requires WSL or a Unix utility suite.
 
@@ -206,7 +223,14 @@ If the repo has a `.codegraph/` index and a CodeGraph MCP server is connected, a
 
 ```text
 just test    # no API key needed
+just package-copilot          # regenerate committed Copilot plugin components
+just package-copilot --check  # fail if generated components are stale
 ```
+
+The Copilot manifest is `.github/plugin/plugin.json`; it loads only the generated
+native entry point and agents under that directory. Canonical methodology stays
+in `skills/review-all/`, and the Claude manifest is unchanged. Commit regenerated
+components with their source changes; marketplace installs do not run a build.
 
 Eval schema, the case list and the iteration loop: [`skills/review-all/evals/README.md`](skills/review-all/evals/README.md).
 

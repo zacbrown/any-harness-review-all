@@ -1,0 +1,23 @@
+{
+  "name": "review-all",
+  "version": "0.1.0",
+  "description": "Native Copilot multi-axis code review with twelve custom agent profiles, deterministic checks, and independent verification. Requires Python >=3.11, uv, Git, and explicit runtime setup.",
+  "author": {
+    "name": "zacbrown",
+    "url": "https://github.com/zacbrown"
+  },
+  "homepage": "https://github.com/zacbrown/any-harness-review-all/blob/main/docs/COPILOT.md",
+  "repository": "https://github.com/zacbrown/any-harness-review-all",
+  "license": "MIT",
+  "keywords": [
+    "code-review",
+    "review",
+    "multi-agent",
+    "verification",
+    "copilot"
+  ],
+  "agents": "./.github/plugin/agents/",
+  "skills": [
+    "./.github/plugin/skills/"
+  ]
+}

@@ -7,10 +7,17 @@ required by the tool. A project's own scripts or its harness may require a shell
 ## Locate the tool, not the reviewed project
 
 In a source checkout, TOOL is the checkout containing `pyproject.toml`,
-`uv.lock`, and `justfile`. In an installed skill, TOOL is
+`uv.lock`, and `justfile`. In a manually installed skill, TOOL is
 `SKILL_ROOT/../../.review-all-tool` (resolve it to an absolute path). The
 ownership-aware installer ships the complete package, resources, tasks and
 deterministic tests there; it never depends on the source checkout afterward.
+
+For the Copilot marketplace plugin, TOOL is the installed plugin root.
+Its entry point is `TOOL/.github/plugin/skills/review-all/SKILL.md`; resolve
+four parent directories from that skill's directory to find TOOL. Shared
+resources are at `TOOL/skills/review-all`, not next to the generated entry point.
+Copilot installs the source package but does not provision its environment.
+Do not run the manual installer inside a plugin installation.
 
 Provision once with `just setup` from TOOL, or without just:
 
@@ -67,6 +74,7 @@ existing helper contracts and algorithms; a legacy `NAME.py` is invoked as the
 | `copilot-results` | start/accept/fail/verifiers/votes/finalize/persist arguments | locked completion ledger, independent verifier inputs, reports/verdict/state | 0; finalize 1 blocked; 2 invalid |
 | `copilot-gate` | explicit repository, target, permissions and model flags | fresh receipt-recomputed verdict; lifecycle persisted only after validation | 0 pass; 1 blocked/partial; 2 missing/stale/malformed/mismatched/execution error |
 | `install`, `uninstall` | `--harness claude\|copilot`, `--user` or `--project PATH` | ownership manifest, resources/profiles/environment; preserve edited/unrelated files | 0; 2 collision/error |
+| `copilot-plugin [--check]` | package checkout, no review target | generate committed `.github/plugin/` components; `--check` rejects drift without writing | 0; 2 stale/unexpected/error |
 | `test [--pattern test_*.py]` | none | all deterministic tests including documentation/eval schema checks | 0 pass; 1 failed; 2 no tests |
 | `eval PREFIX --harness claude\|copilot --out DIR` | fixture prefix (`all` explicit) | opt-in model-backed RESULT/SCORE evidence | 0 pass/explicit skip; 1 failed; 3 no cases |
 | `integration --out DIR` | opt-in Copilot environment variable | actual child-dispatch/context evidence; not a full gate benchmark | 0 pass/explicit skip; 1 failed |

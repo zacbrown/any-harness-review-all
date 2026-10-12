@@ -9,11 +9,129 @@ Python CLI, native process runner and ownership-aware installation.
 ## Install and remove
 
 Prerequisites: **Copilot CLI >=1.0.95**, authenticated; Python >=3.11; uv; Git.
-Just >=1.33 is optional for named tasks. Run `just setup` before installation.
+Just >=1.33 is optional for named tasks.
 See the [shared CLI contract](../skills/review-all/references/cli.md) for
 direct uv commands, tested versions, shell/capability handling and platform
 limitations. Windows 11 and live default-model gate evidence remain pending;
 the historical macOS smoke below is not evidence of those results.
+
+### Marketplace plugin
+
+After this repository's packaging changes and the
+[marketplace registration](#marketplace-registration) are published:
+
+```text
+copilot plugin marketplace add zacbrown/zbrown-copilot-marketplace
+copilot plugin marketplace update zbrown-copilot-marketplace
+copilot plugin install review-all@zbrown-copilot-marketplace
+copilot plugin list
+copilot skill list --json
+```
+
+For direct installation after the packaging changes are published, without a
+marketplace, use `copilot plugin install zacbrown/any-harness-review-all`.
+For local development, `copilot plugin install /absolute/path/to/any-harness-review-all`
+installs the current checkout. Alternatively, preview without installing via
+`copilot --plugin-dir /absolute/path/to/any-harness-review-all`.
+
+The plugin contains **one `review-all` skill and twelve custom agent profiles**.
+The manifest at `.github/plugin/plugin.json` explicitly selects
+`.github/plugin/skills/` and `.github/plugin/agents/`, not the Claude skill at
+`skills/review-all/SKILL.md`. The generated native entry point resolves shared
+resources from `skills/review-all/` in the same plugin, with the adapted workflow
+at `.github/plugin/workflow.md`. The existing `.claude-plugin/` package remains
+independent.
+
+**Runtime setup is a separate, explicit step.** Plugin installation does not
+provision Python dependencies, run hooks, or copy profiles into your user/project
+directories. In `copilot skill list --json`, find `review-all` with
+`"source": "plugin"`; its `path` ends in `.github/plugin/skills/review-all`.
+Resolve four parent directories from that path to get `<tool>` (the installed
+plugin root, not the reviewed repository or original development checkout).
+Run:
+
+```text
+uv run --no-project --no-python-downloads python "<tool>/skills/review-all/cli.py" setup
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<reviewed-repository>" discover --harness copilot
+```
+
+Use absolute paths and an installed Python >=3.11. If Python selection needs
+to be explicit, add `--python /absolute/path/to/python` to the setup invocation.
+Setup creates `<tool>/.venv`; normal reviews use `--no-sync` and never
+bootstrap a runtime. Restart Copilot, confirm the twelve `review-all-*`
+profiles in `/agent`, and use `/review-all`. The packaged model defaults and
+availability requirements below still apply.
+
+To update or remove:
+
+```text
+copilot plugin update review-all
+copilot plugin uninstall review-all
+```
+
+After an update, resolve the installed skill path again, rerun setup, and
+restart Copilot. Do not edit files in the plugin cache; updates replace them.
+Removal is managed by Copilot and does not remove review state or configuration
+in reviewed repositories. Do not use `just uninstall-copilot` to remove a plugin.
+
+**Migrating from the manual installer:** first use `just uninstall-copilot`
+and/or `just uninstall-copilot-project /path/to/repo` for the installations you
+previously created. These commands preserve local edits; inspect any retained
+files rather than deleting them blindly. User/project skills and agents take
+precedence over plugin components and can silently shadow the plugin. If you
+need customized profile model defaults, keep using the manual installer with
+`--config` instead of installing both variants. Plugin profiles use the
+repository's packaged model configuration.
+
+### Marketplace registration
+
+Add this object to the `plugins` array in
+[`zacbrown/zbrown-copilot-marketplace/.github/plugin/marketplace.json`](https://github.com/zacbrown/zbrown-copilot-marketplace/blob/main/.github/plugin/marketplace.json)
+after the generated files are published in this repository:
+
+```json
+{
+  "name": "review-all",
+  "description": "Native Copilot multi-axis code review with twelve custom agent profiles, deterministic checks, and independent verification. Requires Python >=3.11, uv, Git, and explicit runtime setup.",
+  "source": {
+    "source": "github",
+    "repo": "zacbrown/any-harness-review-all"
+  },
+  "repository": "https://github.com/zacbrown/any-harness-review-all"
+}
+```
+
+**Omit `source.path`: the plugin root is this repository's root**, not the
+manifest directory. The Python project, lockfile, canonical resources and
+generated components must all be present. The unpinned entry follows the
+source repository's default branch, matching the marketplace's existing
+entries. For a reproducible release, add `source.ref` or a full 40-character
+`source.sha`; a catalog `version` alone does not pin the source.
+
+The Copilot plugin version follows `pyproject.toml` (independent of the
+upstream Claude plugin version). To prepare a release:
+
+```text
+just setup
+just package-copilot
+just package-copilot --check
+just test --pattern test_copilot_plugin.py
+```
+
+Commit `.github/plugin/` alongside any changed source templates, personas,
+model defaults or version. These are generated distribution files, not a second
+maintained methodology; CI's deterministic suite rejects missing, stale or
+unexpected generated output. Plugin consumers do not run a generation step.
+The MIT license and original upstream attribution remain in `LICENSE`.
+
+See GitHub's [plugin reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference)
+for manifest paths, source pinning and component precedence. This uses the
+supported legacy Copilot format for custom component paths, not the fixed-path
+Agent Plugins format.
+
+### Manual installation
+
+Run `just setup` in the source checkout, then:
 
 ```text
 # From this package checkout:
@@ -32,7 +150,7 @@ Quote paths containing spaces.
 installation or changes to instructions/profiles. Resources resolve from the
 installed skill's absolute path, even while reviewing another checkout.
 
-The installer assembles personas and the shared traceability gate from the
+Both the plugin generator and installer assemble personas and the shared traceability gate from the
 canonical `skills/review-all/agents/` files. Full shared rules, resolved quotas,
 language rules, phase references and scripts travel with the skill. There is
 no independently maintained copy of the review methodology. Generated profiles
@@ -127,7 +245,9 @@ omit it to use the mixed preset. Explicit model overrides retain their precedenc
 Generated profiles declare the resolved `model`, `reasoningEffort`, and
 `modelPolicy: required`. Assignment packages bind model/effort to the input hash;
 native task dispatches pass both `model` and `reasoning_effort` explicitly.
-Reinstall profiles with the same configuration after changing model overrides.
+For manual installations, reinstall profiles with the same configuration after
+changing model overrides. Marketplace profiles have fixed packaged defaults;
+switch to a manual installation for customized profiles.
 An unavailable model/effort must cause an explicit substitution and rebuilt
 package (or a headless error), never an unrecorded fallback. Do not use an Auto
 parent session for this fixed-model workflow. Record runtime-exposed effective
