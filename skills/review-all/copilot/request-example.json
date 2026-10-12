@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "target": {"kind": "staged"},
+  "scope": {"paths": [], "exclude": [], "selectionReason": "user requested staged changes"},
+  "requirements": "/absolute/repo/.copilot/review-all/requirements.txt",
+  "profile": "/absolute/repo/.copilot/review-all/profile.json",
+  "instructions": {
+    "mode": "enabled",
+    "settingsConfirmed": true,
+    "disabledPaths": [],
+    "parentSources": [],
+    "confirmedExtraDirs": []
+  },
+  "checks": [
+    {"name": "Typecheck", "status": "N/A", "reason": "no typecheck configured"},
+    {"name": "Lint", "status": "N/A", "reason": "no linter configured"},
+    {"name": "Tests", "command": ["bash", "tests/run.sh"], "timeoutSeconds": 180},
+    {"name": "Spec Existence", "status": "N/A", "reason": "no added public source"},
+    {"name": "Dependencies", "status": "N/A", "reason": "no dependency manifests changed"}
+  ],
+  "supportingFiles": [],
+  "runtimeIdentity": null
+}

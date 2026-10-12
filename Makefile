@@ -6,14 +6,17 @@
 
 SKILL_SRC := skills/review-all
 SKILL_DEST := $(HOME)/.claude/skills/review-all
+PROJECT ?= .
 
-.PHONY: install uninstall review-self help
+.PHONY: install uninstall review-self help install-copilot install-copilot-project uninstall-copilot uninstall-copilot-project
 
 help:
 	@echo "Targets:"
 	@echo "  install     copy $(SKILL_SRC)/ to $(SKILL_DEST)/"
 	@echo "  uninstall   delete $(SKILL_DEST)/"
 	@echo "  review-self install, then run /review-all on this repo"
+	@echo "  install-copilot / uninstall-copilot   user Copilot skill and agents"
+	@echo "  install-copilot-project / uninstall-copilot-project   PROJECT=/path/to/repo"
 
 install:
 	@mkdir -p "$(SKILL_DEST)"
@@ -26,3 +29,15 @@ uninstall:
 
 review-self: install
 	@echo "Now run /review-all inside Claude Code in this repo."
+
+install-copilot:
+	python3 "$(SKILL_SRC)/scripts/copilot-install.py" install --user
+
+uninstall-copilot:
+	python3 "$(SKILL_SRC)/scripts/copilot-install.py" uninstall --user
+
+install-copilot-project:
+	python3 "$(SKILL_SRC)/scripts/copilot-install.py" install --project "$(PROJECT)"
+
+uninstall-copilot-project:
+	python3 "$(SKILL_SRC)/scripts/copilot-install.py" uninstall --project "$(PROJECT)"
