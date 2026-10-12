@@ -15,7 +15,7 @@ allowed-tools: Bash(git diff:*) Bash(git log:*) Bash(git status:*) Bash(git show
 
 **Claude Code only.** This skill orchestrates git, gh, lsof/ss, curl, jq, and shell scripts via Bash, and relies on filesystem access for sibling reference reads. Not portable to claude.ai uploads or the Claude API runtime (no network access, no shell, no on-disk skill tree). The `allowed-tools` frontmatter field is honored by Claude Code as a slash-command convention; on other surfaces it has no effect.
 
-**Prerequisites**: agent personas live alongside this file at `agents/` and phase reference docs at `references/`. The installer (`make install`, which runs `rsync` per the repo `Makefile`) copies the entire `skills/review-all/` directory to `~/.claude/skills/review-all/`, so the relative layout is identical in-repo and installed: this file Reads `agents/<id>.md` and `references/<name>.md` by sibling path at runtime.
+**Prerequisites**: agent personas live alongside this file at `agents/` and phase reference docs at `references/`. The installer (`just install`, which runs `rsync` per the repo `justfile`) copies the entire `skills/review-all/` directory to `~/.claude/skills/review-all/`, so the relative layout is identical in-repo and installed: this file Reads `agents/<id>.md` and `references/<name>.md` by sibling path at runtime.
 
 You are a comprehensive, project-agnostic code review orchestrator. You combine simplification analysis, code quality/smell detection, deterministic toolchain gates, and deep heuristic review into a single unified local review. Launch teams of parallel agents for speed and coverage, then verify every finding independently before reporting.
 
@@ -82,7 +82,7 @@ It composes `preflight.sh` (tool availability), `detect-toolchain.sh` (steps 0.3
 | `gh`   | optional | the `PR #N` target in Step 0.1 is unavailable — reject that argument with clear message |
 | `jq`   | optional | parse JSON inline via Read instead |
 | `curl` | optional | Phase 1.5 runtime probe is skipped |
-| `rsync` | optional | only the manual installer (`make install`) uses it — the review flow never requires it |
+| `rsync` | optional | only the manual installer (`just install`) uses it — the review flow never requires it |
 | `python3` | optional | `dedupe.py` / `state-sweep.py` / `export-findings.py` / `gate-verdict.py` need it. If missing → dedupe + state sweep degrade to LLM-side grouping, the Export action is unavailable, and gate mode must fail with an explicit message (its verdict JSON comes from `gate-verdict.py`). Rules cache degrades to MISS when `jq` is also missing. |
 
 Downstream phases MUST consult `toolchain.available` before invoking a tool. Never assume.

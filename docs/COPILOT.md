@@ -11,15 +11,19 @@ Prerequisites: **Copilot CLI >=1.0.95**, authenticated; Python >=3.9; Git; Bash
 >=4. The deterministic suite runs on macOS and Linux. The shell discovery
 scripts require a newer Bash than macOS's system Bash 3.2 (for example Homebrew
 Bash on PATH). Native Windows/PowerShell is not supported; use WSL.
+The checkout's installation recipes also require [just](https://just.systems/).
 
 ```sh
 # From this package checkout:
-make install-copilot                   # ~/.copilot/skills/review-all and ~/.copilot/agents
-make install-copilot-project PROJECT=/absolute/path/to/reviewed/repository
+just install-copilot                   # ~/.copilot/skills/review-all and ~/.copilot/agents
+just install-copilot-project /absolute/path/to/reviewed/repository
 
-make uninstall-copilot
-make uninstall-copilot-project PROJECT=/absolute/path/to/reviewed/repository
+just uninstall-copilot
+just uninstall-copilot-project /absolute/path/to/reviewed/repository
 ```
+
+The project recipes default to the package checkout when no path is supplied.
+Quote paths containing spaces.
 
 `COPILOT_HOME` overrides `~/.copilot`. Project installation uses
 `.github/skills/review-all/` and `.github/agents/`. Restart Copilot after

@@ -30,7 +30,7 @@
 #
 # Prereqs:
 #   - `claude` CLI on PATH, authenticated.
-#   - The skill INSTALLED globally (`make install`) so `/review-all` resolves
+#   - The skill INSTALLED globally (`just install`) so `/review-all` resolves
 #     from any cwd, including the temp fixture repo.
 # Runs the review with --dangerously-skip-permissions because every target is an
 # isolated, throwaway fixture repo created by materialize-fixture.py.

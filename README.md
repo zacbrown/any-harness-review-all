@@ -11,9 +11,12 @@ Multi-agent code review for [Claude Code](https://code.claude.com/docs/en/overvi
 
 ## Install
 
-**Copilot CLI:** `make install-copilot` installs the native skill and eleven
+Install [just](https://just.systems/) to use the checkout's installation recipes.
+Run `just` to list them.
+
+**Copilot CLI:** `just install-copilot` installs the native skill and eleven
 custom profiles under `~/.copilot/`. For a project, use
-`make install-copilot-project PROJECT=/path/to/repo`. Requires CLI >=1.0.95.
+`just install-copilot-project /path/to/repo`. Requires CLI >=1.0.95.
 See [Copilot support](docs/COPILOT.md) for configuration, explicit context
 handoffs, permissions, headless wrapper, opt-in integration tests and limitations.
 
@@ -24,7 +27,7 @@ handoffs, permissions, headless wrapper, opt-in integration tests and limitation
 /plugin install review-all@ncoevoet-review-all
 ```
 
-Or, to hack on the skill: `git clone` this repo and run `make install`, which copies `skills/review-all/` to `~/.claude/skills/review-all/` (`make uninstall` removes it).
+Or, to hack on the skill: `git clone` this repo and run `just install`, which copies `skills/review-all/` to `~/.claude/skills/review-all/` (`just uninstall` removes it).
 
 Requires Claude Code, `git`, `bash`, `python3`. `gh` is optional: it is used for `PR #N` targets and for the post-to-PR / create-issue actions.
 
@@ -153,7 +156,7 @@ To add a language, or tighten an existing pack:
 2. Add the glob to `rule_packs` in `skills/review-all/scripts/file-classes.json`, above the `**/*` catch-all.
 3. Run `bash tests/check-rule-packs.sh`.
 
-There is no per-project pack directory: packs are part of the skill. Make the change in a clone and `make install` it, or send a PR. Edits made inside the plugin cache are lost when the plugin updates. For rules that apply to one project only, use `REVIEW.md` or `CLAUDE.md`.
+There is no per-project pack directory: packs are part of the skill. Make the change in a clone and `just install` it, or send a PR. Edits made inside the plugin cache are lost when the plugin updates. For rules that apply to one project only, use `REVIEW.md` or `CLAUDE.md`.
 
 ### Custom agents
 
