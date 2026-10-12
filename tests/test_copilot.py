@@ -403,6 +403,15 @@ class TestCopilotPackages(Fixture):
         self.assertEqual("PASS", manifest["checks"][2]["status"])
         self.assertTrue(PACKAGE.fresh(directory))
 
+    def test_check_receipts_preserve_interleaved_diagnostics(self):
+        self.request["checks"][2] = {"name": "Tests", "command": [sys.executable, "-c",
+            "import os; os.write(1,b'test-one\\n'); os.write(2,b'error-one\\n'); os.write(1,b'test-two\\n')"]}
+        _, manifest = self.prepare()
+        receipt = manifest["checks"][2]
+        self.assertEqual("PASS", receipt["status"])
+        output = b"".join(Path(p).read_bytes() for p in receipt["output"])
+        self.assertEqual(b"test-one\nerror-one\ntest-two\n", output)
+
     def test_large_unicode_parts_are_lossless_and_bounded(self):
         data = ("wide: \u00e9\n" * 5000).encode()
         parts = PACKAGE.split_bytes(data, 11)

@@ -12,7 +12,8 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills/review-all/scripts"))
-from portable import execute, file_lock, run
+import portable
+from portable import command_line, execute, file_lock, find_executable, run
 
 
 class NativeCase(unittest.TestCase):
@@ -23,6 +24,58 @@ class NativeCase(unittest.TestCase):
 
 
 class Portable(NativeCase):
+    def test_windows_lookup_ignores_repo_relative_path_and_cwd(self):
+        original_search_control = os.environ.get("NoDefaultCurrentDirectoryInExePath")
+        repo = self.root / "repo"
+        (repo / ".git").mkdir(parents=True)
+        (repo / "bin").mkdir()
+        working = repo / "subdirectory"
+        working.mkdir()
+        trusted = self.root / "trusted"
+        trusted.mkdir()
+        for directory in (repo, repo / "bin", working, trusted):
+            for name in ("git.exe", "powershell.exe"):
+                binary = directory / name
+                binary.write_bytes(b"planted binary")
+                binary.chmod(0o755)
+        env = {"PATH": os.pathsep.join(["", ".", "bin", str(repo), str(repo / "bin"), str(trusted)]),
+               "PATHEXT": ".exe;.cmd", "NoDefaultCurrentDirectoryInExePath": ""}
+        with patch.object(portable, "WINDOWS", True):
+            self.assertEqual(str(trusted / "git.exe"), find_executable("git", env, working))
+            self.assertEqual(str(trusted / "powershell.exe"), find_executable("powershell", env, working))
+            command_line(["git", "status"], env, working)
+            self.assertEqual(str(trusted), env["PATH"])
+            self.assertEqual("1", env["NoDefaultCurrentDirectoryInExePath"])
+            (trusted / "git.exe").unlink()
+            with self.assertRaises(FileNotFoundError):
+                command_line(["git", "status"], env, working)
+        self.assertEqual(original_search_control, os.environ.get("NoDefaultCurrentDirectoryInExePath"))
+
+    @unittest.skipUnless(os.name == "nt", "Windows planted executable regression")
+    def test_windows_discovery_does_not_execute_planted_git(self):
+        import discovery
+        trusted_git = shutil.which("git")
+        self.assertIsNotNone(trusted_git)
+        (self.root / "git.exe").write_bytes(b"this binary must never execute")
+        (self.root / ".git").mkdir()
+        working = self.root / "nested"
+        working.mkdir()
+        environment = {**os.environ, "PATH": os.pathsep.join(["", ".", str(self.root), str(Path(trusted_git).parent)]),
+                       "NoDefaultCurrentDirectoryInExePath": ""}
+        original = Path.cwd()
+        try:
+            os.chdir(self.root)
+            with patch.dict(os.environ, environment):
+                self.assertTrue(discovery.preflight(working)["git"])
+                self.assertEqual(str(self.root), str(discovery.root(self.root)))
+                result = execute(["git", "--version"], cwd=working)
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertIn(b"git version", result.stdout)
+                child = execute([sys.executable, "-c", "import os; print(os.environ['NoDefaultCurrentDirectoryInExePath'])"], cwd=working)
+                self.assertEqual(b"1", child.stdout.strip())
+        finally:
+            os.chdir(original)
+
     def test_bytes_arguments_large_output_and_errors(self):
         args = ["space value", "\u03bb\u4e16", "[a]", "$x; & ! %PATH% ^", 'a"b', "ends\\"]
         result = execute([sys.executable, "-c", "import sys,json; print(json.dumps(sys.argv[1:])); "
@@ -38,6 +91,14 @@ class Portable(NativeCase):
             execute(["review-all-definitely-missing-executable"], cwd=self.root)
         with self.assertRaises(ValueError):
             execute([sys.executable], cwd=self.root, timeout=0)
+
+    def test_merged_output_keeps_write_order(self):
+        script = ("import os; os.write(1,b'out-1\\n'); os.write(2,b'err-1\\n'); "
+                  "os.write(1,b'out-2\\n'); os.write(2,b'err-2\\n')")
+        result = execute([sys.executable, "-c", script], cwd=self.root, merge_stderr=True)
+        self.assertEqual(0, result.returncode)
+        self.assertEqual(b"out-1\nerr-1\nout-2\nerr-2\n", result.stdout)
+        self.assertEqual(b"", result.stderr)
 
     def test_timeout_and_normal_exit_clean_descendants(self):
         for timeout in (True, False):

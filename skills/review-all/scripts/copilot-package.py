@@ -177,8 +177,8 @@ def checks(repo, specs, writer, target_matches=True):
                 raise ValueError("check command must be an argv array, not shell text")
             elapsed = None
             try:
-                proc = execute(argv, cwd=repo, timeout=spec.get("timeoutSeconds", 180))
-                code, output, elapsed = proc.returncode, proc.stdout + proc.stderr, proc.elapsed
+                proc = execute(argv, cwd=repo, timeout=spec.get("timeoutSeconds", 180), merge_stderr=True)
+                code, output, elapsed = proc.returncode, proc.stdout, proc.elapsed
                 status = "TIMEOUT" if proc.timed_out else "PASS" if code == 0 else "FAIL"
             except OSError as error:
                 code, output, status = None, str(error).encode(), "SKIP"

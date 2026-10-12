@@ -83,8 +83,10 @@ def main(argv, manual=False):
     model = ["--model", args.model] if args.model else []
     effort = ["--effort", args.effort] if args.effort else []
     tally = load_module("severity-tally")
+    config_json = os.environ.get("REVIEW_ALL_CONFIG_JSON", "")
     print(f"CONFIG,harness=claude,model={args.model or '<cli-default:UNPINNED>'},"
-          f"effort={args.effort or '<skill-floor:high>'},runs={args.runs},timeout={args.timeout}")
+          f"effort={args.effort or '<skill-floor:high>'},runs={args.runs},timeout={args.timeout},"
+          f"config_json={json.dumps(config_json)}")
     failures = 0
     for path in cases:
         case = read_json(path)
@@ -95,14 +97,20 @@ def main(argv, manual=False):
             try:
                 run([sys.executable, str(SKILL / "scripts/materialize-fixture.py"), str(path), str(repo)],
                     capture_output=True, check=True)
-                if os.environ.get("REVIEW_ALL_CONFIG_JSON"):
-                    atomic(repo / ".claude/review-all.json", json.loads(os.environ["REVIEW_ALL_CONFIG_JSON"]))
+                if config_json:
+                    atomic(repo / ".claude/review-all.json", json.loads(config_json))
                 prompt = (f"Run the {case.get('query', '/review-all')} skill on this repository's changes. "
                           "Output ONLY the final review report through Phase 3. Do NOT run the Phase 4 "
                           "interactive menu and do NOT call AskUserQuestion.")
                 command = [args.claude, "-p", prompt, "--dangerously-skip-permissions", *effort, *model]
                 for attempt in range(2):
-                    report = run(command, cwd=repo, capture_output=True, timeout=args.timeout)
+                    try:
+                        report = run(command, cwd=repo, capture_output=True, timeout=args.timeout)
+                    except subprocess.TimeoutExpired as error:
+                        atomic(directory / f"report-{attempt}.txt", error.output or b"")
+                        atomic(directory / f"stderr-{attempt}.txt", error.stderr or b"")
+                        print(f"{path.stem}: review attempt {attempt + 1} timed out", file=sys.stderr)
+                        continue
                     atomic(directory / f"report-{attempt}.txt", report.stdout)
                     atomic(directory / f"stderr-{attempt}.txt", report.stderr)
                     text = report.stdout.decode("utf-8")

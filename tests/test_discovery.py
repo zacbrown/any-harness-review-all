@@ -1,4 +1,5 @@
 import hashlib
+import errno
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -10,6 +11,7 @@ import time
 from threading import Thread
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "skills/review-all/scripts"))
@@ -36,7 +38,7 @@ class Discovery(unittest.TestCase):
         self.assertTrue(available["git"])
         self.assertTrue(all(available["capabilities"].values()))
         self.assertEqual("", discovery.toolchain(self.repo)["ecosystem"])
-        with patch.object(discovery.shutil, "which", return_value=None):
+        with patch.object(discovery, "find_executable", return_value=None):
             with self.assertRaisesRegex(FileNotFoundError, "git"):
                 discovery.discover(self.repo)
 
@@ -56,6 +58,55 @@ class Discovery(unittest.TestCase):
         run(["git", "add", "."], cwd=self.repo, capture_output=True, check=True)
         self.assertEqual({"pattern": "co-located", "suffix": ".spec.ts", "framework": "unknown"},
                          discovery.test_pattern(self.repo))
+
+    def test_null_scripts_discovers_without_checks(self):
+        self.write("package.json", json.dumps({"scripts": None}))
+        data = discovery.discover(self.repo)["toolchain"]
+        self.assertEqual("js", data["ecosystem"])
+        self.assertEqual({}, data["commands"])
+        for scripts in ([], "npm test", False, 1):
+            self.write("package.json", json.dumps({"scripts": scripts}))
+            with self.subTest(scripts=scripts), self.assertRaisesRegex(ValueError, "scripts must be"):
+                discovery.discover(self.repo)
+
+    @unittest.skipIf(os.name == "nt", "POSIX filenames allow arbitrary byte sequences")
+    def test_git_path_bytes_use_filesystem_decoding(self):
+        data = b"bad-\xff.test.py\0"
+        with patch.object(discovery, "execute", return_value=SimpleNamespace(returncode=0, stdout=data)):
+            self.assertEqual([os.fsdecode(data[:-1])], discovery.tracked(self.repo))
+        result = SimpleNamespace(returncode=0, timed_out=False, stdout=b"/repo-\xff\n")
+        with patch.object(discovery, "execute", return_value=result):
+            self.assertEqual(os.fsdecode(b"/repo-\xff"), str(discovery.root(self.repo)))
+
+    @unittest.skipIf(os.name == "nt", "POSIX filenames allow arbitrary byte sequences")
+    def test_non_utf8_git_paths_and_rule_directories(self):
+        filename = os.fsdecode(b"bad-\xff.test.py")
+        try:
+            self.write(filename, "value = 1\n")
+        except OSError as error:
+            if error.errno == errno.EILSEQ:
+                self.skipTest("filesystem rejects non-UTF-8 names")
+            raise
+        rules = self.write(os.fsdecode(b"module-\xff/CLAUDE.md"), "# Rules\n")
+        run(["git", "add", "."], cwd=self.repo, capture_output=True, check=True)
+        self.assertIn(filename, discovery.tracked(self.repo))
+        result = discovery.discover(self.repo)
+        self.assertEqual(".test.py", result["testPattern"]["suffix"])
+        manifest = (b"v2\nmodule-\xff/CLAUDE.md " + hashlib.sha256(rules.read_bytes()).hexdigest().encode() + b"\n")
+        self.assertEqual(hashlib.sha256(manifest).hexdigest(), result["cacheKey"])
+
+    def test_typescript_fallback_requires_installed_compiler(self):
+        self.write("package.json", "{}")
+        self.write("tsconfig.json", "{}")
+        data = discovery.toolchain(self.repo)
+        self.assertEqual("", data["typecheck"])
+        self.assertNotIn("typecheck", data["commands"])
+        compiler = self.write("node_modules/typescript/bin/tsc", "// installed compiler")
+        data = discovery.toolchain(self.repo)
+        self.assertEqual(["node", str(compiler), "--noEmit"], data["commands"]["typecheck"]["argv"])
+        self.write("package.json", json.dumps({"scripts": {"typecheck": "custom-check"}}))
+        compiler.unlink()
+        self.assertEqual(["npm", "run", "typecheck"], discovery.toolchain(self.repo)["commands"]["typecheck"]["argv"])
 
     def test_cache_contract_and_exact_input_bytes(self):
         rules = self.write("CLAUDE.md", b"# Rules\r\n")

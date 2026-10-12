@@ -16,6 +16,48 @@ import sys
 import tempfile
 import time
 
+WINDOWS = os.name == "nt"
+
+
+def safe_search_environment(env, cwd=None):
+    """Exclude implicit/relative PATH entries and the reviewed tree on Windows."""
+    if not WINDOWS:
+        return env
+    current = Path.cwd().resolve()
+    working = Path(cwd or current).resolve()
+    repository = next((p for p in (working, *working.parents) if (p / ".git").exists()), working)
+    directories = []
+    for entry in env.get("PATH", os.defpath).split(os.pathsep):
+        path = Path(entry)
+        if not entry or not path.is_absolute():
+            continue
+        resolved = path.resolve()
+        if resolved.is_relative_to(repository) or resolved == current:
+            continue
+        directories.append(str(resolved))
+    return {**env, "PATH": os.pathsep.join(directories), "NoDefaultCurrentDirectoryInExePath": "1"}
+
+
+def find_executable(name, env=None, cwd=None):
+    environment = safe_search_environment(os.environ if env is None else env, cwd)
+    if not WINDOWS:
+        return shutil.which(name, path=environment.get("PATH"))
+    # shutil.which consults the parent's environment for Windows current-directory
+    # search. Resolve explicit candidates instead, using only the child environment.
+    extensions = [ext for ext in environment.get("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(";") if ext]
+    names = [name] if Path(name).suffix.lower() in {e.lower() for e in extensions} else [name, *(name + e for e in extensions)]
+    for directory in environment["PATH"].split(os.pathsep):
+        if not directory:
+            continue
+        for candidate in names:
+            path = Path(directory) / candidate
+            if path.is_file() and os.access(path, os.X_OK):
+                # A PATH directory can also contain a symlink into the reviewed tree.
+                resolved_directory = str(path.resolve().parent)
+                if safe_search_environment({**environment, "PATH": resolved_directory}, cwd)["PATH"]:
+                    return str(path)
+    return None
+
 
 def environment_identity():
     return {"system": platform.system(), "machine": platform.machine(),
@@ -28,11 +70,12 @@ def command_line(argv, env, cwd):
     argv = [os.fspath(a) for a in argv]
     if any("\0" in a for a in argv):
         raise ValueError("NUL is not permitted in command arguments")
+    env.update(safe_search_environment(env, cwd))
     name = argv[0]
     if os.path.dirname(name):
         executable = str((Path(cwd or Path.cwd()) / name).resolve())
     else:
-        executable = shutil.which(name, path=env.get("PATH"))
+        executable = find_executable(name, env, cwd)
     if not executable:
         raise FileNotFoundError(f"executable not found: {name}")
     argv[0] = executable
@@ -42,7 +85,7 @@ def command_line(argv, env, cwd):
         return argv
     suffix = Path(executable).suffix.lower()
     if suffix == ".ps1":
-        powershell = shutil.which("pwsh", path=env.get("PATH")) or shutil.which("powershell", path=env.get("PATH"))
+        powershell = find_executable("pwsh", env, cwd) or find_executable("powershell", env, cwd)
         if not powershell:
             raise FileNotFoundError("PowerShell is required by the configured .ps1 command")
         return [powershell, "-NoLogo", "-NoProfile", "-NonInteractive", "-File", *argv]
@@ -128,7 +171,7 @@ class Execution:
                 "elapsedSeconds": self.elapsed, "timedOut": self.timed_out}
 
 
-def execute(argv, *, cwd, timeout=180, input=None, env=None):
+def execute(argv, *, cwd, timeout=180, input=None, env=None, merge_stderr=False):
     if not isinstance(timeout, (int, float)) or not 0 < timeout < float("inf"):
         raise ValueError("timeout must be a finite positive number")
     environment = dict(os.environ if env is None else env)
@@ -142,7 +185,8 @@ def execute(argv, *, cwd, timeout=180, input=None, env=None):
     # parent exits with inherited handles still open in a descendant.
     with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
         proc = subprocess.Popen(command, cwd=cwd, env=environment, stdin=subprocess.PIPE,
-                                stdout=stdout, stderr=stderr, start_new_session=os.name != "nt",
+                                stdout=stdout, stderr=stdout if merge_stderr else stderr,
+                                start_new_session=os.name != "nt",
                                 creationflags=0x4 if os.name == "nt" else 0)
         try:
             if os.name == "nt":

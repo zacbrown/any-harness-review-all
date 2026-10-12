@@ -90,6 +90,11 @@ are handled centrally. Batch arguments with quotes/newlines are rejected with
 an explicit error: use a native executable for those values. PowerShell scripts
 require installed PowerShell and remain subject to its execution policy.
 
+Windows bare executable lookup uses absolute PATH entries outside the reviewed
+repository and current directory. Empty and relative entries are ignored, and
+child processes inherit `NoDefaultCurrentDirectoryInExePath=1`. Project-local
+tools must be named by an explicit path or invoked through a package manager.
+
 Process execution drains large output to temporary files and kills the process
 group on Unix or the preassigned Job Object on Windows, including descendants.
 This also cleans up background descendants on normal completion; a check is not

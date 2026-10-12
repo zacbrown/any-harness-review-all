@@ -3,9 +3,9 @@
 from collections import Counter
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
-import shutil
 import socket
 import ssl
 import subprocess
@@ -15,11 +15,11 @@ import urllib.error
 import urllib.request
 import urllib.parse
 
-from portable import execute, run
+from portable import execute, find_executable, run
 
 
-def preflight():
-    return {**{tool: shutil.which(tool) is not None for tool in ("git", "gh")},
+def preflight(repo=None):
+    return {**{tool: find_executable(tool, cwd=repo) is not None for tool in ("git", "gh")},
             "capabilities": {"timeouts": True, "tcp": True, "http": True, "hashing": True}}
 
 
@@ -28,7 +28,7 @@ def root(repo):
     result = execute(["git", "rev-parse", "--show-toplevel"], cwd=repo)
     if result.timed_out:
         raise TimeoutError("git repository discovery timed out")
-    return Path(result.stdout.decode("utf-8").strip()) if result.returncode == 0 else repo
+    return Path(os.fsdecode(result.stdout.rstrip(b"\n"))) if result.returncode == 0 else repo
 
 
 def tracked(repo, *args):
@@ -37,7 +37,7 @@ def tracked(repo, *args):
         if (Path(repo) / ".git").exists():
             raise ValueError(result.stderr.decode("utf-8", errors="replace"))
         return []
-    return result.stdout.decode("utf-8").rstrip("\0").split("\0") if result.stdout else []
+    return os.fsdecode(result.stdout).rstrip("\0").split("\0") if result.stdout else []
 
 
 def toolchain(repo):
@@ -73,7 +73,11 @@ def toolchain(repo):
                 framework = name
                 break
         set_commands("js", framework)
-        scripts = package.get("scripts", {})
+        scripts = package.get("scripts")
+        if scripts is None:
+            scripts = {}
+        if not isinstance(scripts, dict):
+            raise ValueError("package.json scripts must be an object or null")
         for name in ("test", "lint", "typecheck", "build"):
             script = scripts.get(name)
             if script:
@@ -84,14 +88,15 @@ def toolchain(repo):
         if not data["typecheck"] and exists("tsconfig.json"):
             # Do not download a compiler. Resolve only the project's installed one.
             compiler = repo / "node_modules/typescript/bin/tsc"
-            data["typecheck"] = "node node_modules/typescript/bin/tsc --noEmit"
-            commands["typecheck"] = {"argv": ["node", str(compiler), "--noEmit"]}
+            if compiler.is_file():
+                data["typecheck"] = "node node_modules/typescript/bin/tsc --noEmit"
+                commands["typecheck"] = {"argv": ["node", str(compiler), "--noEmit"]}
     elif exists("pyproject.toml", "setup.cfg", "requirements.txt"):
         set_commands("python")
         for name, choices in (("test", [["pytest"]]), ("lint", [["ruff", "check", "."], ["flake8"]]),
                               ("typecheck", [["mypy", "."], ["pyright"]])):
             for argv in choices:
-                if shutil.which(argv[0]):
+                if find_executable(argv[0], cwd=repo):
                     data[name] = " ".join(argv)
                     commands[name] = {"argv": argv}
                     break
@@ -101,7 +106,7 @@ def toolchain(repo):
     elif exists("go.mod"):
         set_commands("go", test=["go", "test", "./..."], typecheck=["go", "vet", "./..."],
                      build=["go", "build", "./..."])
-        if shutil.which("golangci-lint"):
+        if find_executable("golangci-lint", cwd=repo):
             data["lint"] = "golangci-lint run"
             commands["lint"] = {"argv": ["golangci-lint", "run"]}
     elif exists("pom.xml"):
@@ -112,7 +117,7 @@ def toolchain(repo):
         set_commands("dotnet", test=["dotnet", "test"], build=["dotnet", "build"])
     elif exists("Gemfile"):
         set_commands("ruby", test=["bundle", "exec", "rspec"])
-        if shutil.which("rubocop"):
+        if find_executable("rubocop", cwd=repo):
             data["lint"], commands["lint"] = "rubocop", {"argv": ["rubocop"]}
     elif exists("composer.json"):
         set_commands("php", test=["php", "vendor/bin/phpunit"])
@@ -148,7 +153,7 @@ def test_pattern(repo):
 
 
 def discover(repo, harness="claude"):
-    available = preflight()
+    available = preflight(repo)
     if not available["git"]:
         raise FileNotFoundError("git is required")
     repo = root(repo)
@@ -161,10 +166,10 @@ def discover(repo, harness="claude"):
     if (repo / "CLAUDE.local.md").is_file():
         names.add("CLAUDE.local.md")
     manifest = b"v2\n"
-    for name in sorted(names, key=lambda n: n.encode("utf-8")):
+    for name in sorted(names, key=os.fsencode):
         path = repo / name
         if path.is_file():
-            manifest += f"{name} {hashlib.sha256(path.read_bytes()).hexdigest()}\n".encode("utf-8")
+            manifest += os.fsencode(name) + f" {hashlib.sha256(path.read_bytes()).hexdigest()}\n".encode("ascii")
     key = hashlib.sha256(manifest).hexdigest()
     cache = repo / ".claude/cache/review-all-profile.json"
     profile, reason = None, "no-cache"
