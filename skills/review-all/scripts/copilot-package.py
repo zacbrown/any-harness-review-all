@@ -6,8 +6,6 @@ import json
 import os
 from pathlib import Path
 import re
-import signal
-import subprocess
 import sys
 import uuid
 
@@ -15,6 +13,7 @@ from copilot_common import RUNTIME, SCHEMA, SKILL, adapt, agent_id, atomic, body
 from copilot_common import digest, encoded, file_hash, git, load_module, model_for, now, read_json
 from copilot_common import persona_text, reasoning_for, resource_hashes, run, safe_path, state_path
 from copilot_instructions import collect
+from portable import environment_identity, execute
 
 SELECT = load_module("select-files")
 AXES = load_module("select-agents")
@@ -176,25 +175,18 @@ def checks(repo, specs, writer, target_matches=True):
             argv = spec["command"]
             if not isinstance(argv, list) or not all(isinstance(s, str) for s in argv):
                 raise ValueError("check command must be an argv array, not shell text")
+            elapsed = None
             try:
-                proc = subprocess.Popen(argv, cwd=repo, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                        start_new_session=True)
-                try:
-                    output, _ = proc.communicate(timeout=spec.get("timeoutSeconds", 180))
-                except subprocess.TimeoutExpired:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                    output, _ = proc.communicate()
-                    raise subprocess.TimeoutExpired(argv, spec.get("timeoutSeconds", 180), output=output)
-                code = proc.returncode
-                status = "PASS" if code == 0 else "FAIL"
-            except subprocess.TimeoutExpired as error:
-                code, output, status = 124, error.stdout or b"", "TIMEOUT"
+                proc = execute(argv, cwd=repo, timeout=spec.get("timeoutSeconds", 180), merge_stderr=True)
+                code, output, elapsed = proc.returncode, proc.stdout, proc.elapsed
+                status = "TIMEOUT" if proc.timed_out else "PASS" if code == 0 else "FAIL"
             except OSError as error:
                 code, output, status = None, str(error).encode(), "SKIP"
             paths = writer.store("check-" + spec["name"].replace(" ", "-"), output)
             results.append({"name": spec["name"], "command": argv, "exitCode": code, "status": status,
                             "reason": output.decode(errors="replace") if status == "SKIP" else None,
-                            "startedAt": started, "finishedAt": now(), "output": paths, "cwd": str(repo)})
+                            "startedAt": started, "finishedAt": now(), "output": paths, "cwd": str(repo),
+                            "elapsedSeconds": elapsed, "timedOut": status == "TIMEOUT"})
         else:
             if spec.get("status") not in {"SKIP", "N/A"} or not spec.get("reason"):
                 raise ValueError(f"{spec['name']}: nonexecuted checks require SKIP/N/A and reason")
@@ -300,9 +292,9 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
     if tree_hashes(repo) != baseline:
         raise ValueError("reviewed inputs changed while checks ran; prepare a fresh run")
     context["protocol"] = writer.store("protocol", (SKILL / "copilot/dispatch.md").read_bytes())
-    contract = (SKILL / "copilot/result-contract.md").read_text().split("## Verifier findings", 1)[0].encode()
+    contract = (SKILL / "copilot/result-contract.md").read_text(encoding="utf-8").split("## Verifier findings", 1)[0].encode()
     context["resultContract"] = writer.store("result-contract", contract)
-    shared = adapt(body((SKILL / "agents/_shared.md").read_text()))
+    shared = adapt(body((SKILL / "agents/_shared.md").read_text(encoding="utf-8")))
     for tier, key, default in [("debt", "quotaDebt", 5), ("suggested", "quotaSuggested", 3), ("question", "quotaQuestion", 2)]:
         shared = shared.replace("${quota." + tier + "}", str(config.get(key, default)))
     shared = re.sub(r"\$\{codegraphTools\.\w+\}", "unavailable (use native search)", shared)
@@ -391,6 +383,7 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
                 "sources": sources, "context": context, "checks": results, "dismissals": all_dismissals,
                 "watched": watched, "treeHashes": baseline, "resources": resource_hashes(),
                 "runtime": {"cliVersion": version, "identity": request.get("runtimeIdentity"),
+                            "environment": environment_identity(),
                             "reuseEnabled": False,
                             "reuseReason": "effective per-subagent model/provider identity cannot be independently established"},
                 "canonicalChunks": [[{k: v for k, v in p.items() if k != "data"} for p in c] for c in canonical],
@@ -413,6 +406,8 @@ def fresh(directory):
         raise ValueError("invalid package manifest")
     if package_hash(manifest) != manifest["packageHash"]:
         raise ValueError("package manifest integrity mismatch")
+    if manifest["runtime"].get("environment") != environment_identity():
+        raise ValueError("execution environment changed; prepare a fresh run")
     repo = Path(manifest["repo"])
     if git(repo, "rev-parse", "HEAD").decode().strip() != manifest["localHead"] or tree_hashes(repo) != manifest["treeHashes"]:
         raise ValueError("reviewed source/index inputs changed")

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "any-harness-review-all"
+version = "0.1.0"
+description = "Shared, native cross-platform tooling for the review-all skill"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+review-all = "review_all.cli:main"
+
+[tool.setuptools]
+packages = ["review_all"]
+package-dir = {review_all = "skills/review-all"}
+include-package-data = false
+
+[tool.setuptools.package-data]
+review_all = ["SKILL.md", "agents/*.md", "copilot/*", "evals/*", "references/*.md",
+              "rules/*.md", "scripts/*.py", "scripts/*.json"]

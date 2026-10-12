@@ -32,7 +32,7 @@ def _good():
 class TestValidateEvals(unittest.TestCase):
     def _run(self, obj, name="x.json"):
         with tempfile.TemporaryDirectory() as d:
-            with open(os.path.join(d, name), "w") as f:
+            with open(os.path.join(d, name), "w", encoding="utf-8") as f:
                 json.dump(obj, f)
             return ve.validate_dir(d)
 
@@ -91,7 +91,7 @@ class TestValidateEvals(unittest.TestCase):
 
     def test_invalid_json_fails(self):
         with tempfile.TemporaryDirectory() as d:
-            with open(os.path.join(d, "x.json"), "w") as f:
+            with open(os.path.join(d, "x.json"), "w", encoding="utf-8") as f:
                 f.write("{ not json")
             errors, _w, _n, _n_sel = ve.validate_dir(d)
             self.assertTrue(any("JSON" in e for e in errors), errors)

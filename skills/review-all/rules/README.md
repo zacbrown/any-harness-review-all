@@ -26,4 +26,4 @@ are injected.
 
 1. Add `rules/<lang>.md` following the shape above.
 2. Add its glob to the `rule_packs` map in `skills/review-all/scripts/file-classes.json`.
-3. Run `tests/check-rule-packs.sh` — it enforces the cap and the mandatory section.
+3. Run `just test --pattern test_documentation.py` — it enforces the cap and the mandatory section.

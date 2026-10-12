@@ -1,37 +1,86 @@
-skill_src := "skills/review-all"
-skill_dest := home_directory() / ".claude/skills/review-all"
+set script-interpreter := ["uv", "run", "--project", ".", "--locked", "--no-sync", "--no-python-downloads", "python"]
+set positional-arguments
+export REVIEW_ALL_TOOL := justfile_directory()
+export UV_PROJECT_ENVIRONMENT := justfile_directory() / ".venv"
 
-# List available recipes (also the default action).
+[script]
 help:
-    @just --list
+    from review_all.cli import main
+    raise SystemExit(main(["help"]))
 
-# Install the Claude Code skill.
+# The only task allowed to synchronize dependencies. Requires an installed Python.
+[script("uv", "run", "--no-project", "--no-python-downloads", "python")]
+setup:
+    import os, runpy
+    from pathlib import Path
+    module = runpy.run_path(str(Path(os.environ["REVIEW_ALL_TOOL"]) / "skills/review-all/cli.py"))
+    raise SystemExit(module["setup"]())
+
+[script]
 install:
-    @mkdir -p "{{ skill_dest }}"
-    @rsync -a --delete "{{ skill_src }}/" "{{ skill_dest }}/"
-    @echo "Installed: {{ skill_dest }}"
+    from review_all.cli import main
+    raise SystemExit(main(["install", "--user"]))
 
-# Remove the installed Claude Code skill.
+[script]
 uninstall:
-    @rm -rf "{{ skill_dest }}"
-    @echo "Removed: {{ skill_dest }}"
+    from review_all.cli import main
+    raise SystemExit(main(["uninstall", "--user"]))
 
-# Install, then show how to review this repository.
-review-self: install
-    @echo "Now run /review-all inside Claude Code in this repo."
-
-# Install the user-level Copilot skill and agents.
+[script]
 install-copilot:
-    python3 "{{ skill_src }}/scripts/copilot-install.py" install --user
+    from review_all.cli import main
+    raise SystemExit(main(["install", "--harness", "copilot", "--user"]))
 
-# Remove unchanged package-owned user-level Copilot files.
+[script]
 uninstall-copilot:
-    python3 "{{ skill_src }}/scripts/copilot-install.py" uninstall --user
+    from review_all.cli import main
+    raise SystemExit(main(["uninstall", "--harness", "copilot", "--user"]))
 
-# Install the Copilot skill and agents into a project (default: this repository).
+# Project recipes retain the historical default: the package checkout.
+[script]
 install-copilot-project project=".":
-    python3 "{{ skill_src }}/scripts/copilot-install.py" install --project "{{ project }}"
+    import sys
+    from review_all.cli import main
+    raise SystemExit(main(["install", "--harness", "copilot", "--project", *sys.argv[1:]]))
 
-# Remove unchanged package-owned Copilot files from a project.
+[script]
 uninstall-copilot-project project=".":
-    python3 "{{ skill_src }}/scripts/copilot-install.py" uninstall --project "{{ project }}"
+    import sys
+    from review_all.cli import main
+    raise SystemExit(main(["uninstall", "--harness", "copilot", "--project", *sys.argv[1:]]))
+
+[script]
+review-self: install
+    from review_all.cli import main
+    raise SystemExit(main(["review-self"]))
+
+# Unlike installation, review targets are always explicit.
+[script]
+discover repo *args:
+    import sys
+    from review_all.cli import main
+    raise SystemExit(main(["--repo", sys.argv[1], "discover", *sys.argv[2:]]))
+
+[script]
+test *args:
+    import sys
+    from review_all.cli import main
+    raise SystemExit(main(["test", *sys.argv[1:]]))
+
+[script]
+eval *args:
+    import sys
+    from review_all.cli import main
+    raise SystemExit(main(["eval", *sys.argv[1:]]))
+
+[script]
+gate repo *args:
+    import sys
+    from review_all.cli import main
+    raise SystemExit(main(["--repo", sys.argv[1], "copilot-gate", *sys.argv[2:]]))
+
+[script]
+cli +args:
+    import sys
+    from review_all.cli import main
+    raise SystemExit(main(sys.argv[1:]))

@@ -11,8 +11,12 @@ Multi-agent code review for [Claude Code](https://code.claude.com/docs/en/overvi
 
 ## Install
 
-Install [just](https://just.systems/) to use the checkout's installation recipes.
-Run `just` to list them.
+Requires installed Python >=3.11, uv, and Git. [Just](https://just.systems/)
+>=1.33 is optional for named tasks. From the checkout run **`just setup`**,
+then `just install` (Claude) or `just install-copilot`. Run `just` for help.
+Setup is explicit; normal reviews never sync dependencies or download Python.
+See the [shared CLI contract](skills/review-all/references/cli.md) for direct
+uv invocation without just, all command interfaces, platform limits and evidence.
 
 **Copilot CLI:** `just install-copilot` installs the native skill and twelve
 custom profiles under `~/.copilot/`. For a project, use
@@ -20,16 +24,12 @@ custom profiles under `~/.copilot/`. For a project, use
 See [Copilot support](docs/COPILOT.md) for configuration, explicit context
 handoffs, permissions, headless wrapper, opt-in integration tests and limitations.
 
-**Claude Code** (existing installation and behavior):
-
-```
-/plugin marketplace add ncoevoet/claude-review-all
-/plugin install review-all@ncoevoet-review-all
-```
-
-Or, to hack on the skill: `git clone` this repo and run `just install`, which copies `skills/review-all/` to `~/.claude/skills/review-all/` (`just uninstall` removes it).
-
-Requires Claude Code, `git`, `bash`, `python3`. `gh` is optional: it is used for `PR #N` targets and for the post-to-PR / create-issue actions.
+**Claude Code:** `just install` installs under `~/.claude/`; `just uninstall`
+removes unchanged owned files and preserves local edits. Both harness installers
+ship the package, lockfile, tasks, resources and tool environment as a complete
+unit. Old marketplace copies need migration with this installer; merely copying
+SKILL.md does not provision the runtime. `gh` is optional for PR targets and
+publication. Neither supported workflow requires WSL or a Unix utility suite.
 
 ## Use
 
@@ -44,7 +44,7 @@ Requires Claude Code, `git`, `bash`, `python3`. `gh` is optional: it is used for
 | _file paths_, `--paths a,b`, `--exclude x,y` | Narrow the diff to / away from these paths |
 | `gate` / `--ci` | Headless mode: JSON verdict and exit code, no menu (see [Gate mode](#gate-mode-ci)) |
 
-```
+```text
 /review-all
 /review-all PR #123
 /review-all vs main --exclude apps/legacy
@@ -58,7 +58,7 @@ uses the same canonical review methodology with explicit model IDs,
 `.copilot/` state, named custom agents, and validated file-backed inputs;
 see [adapter differences](docs/COPILOT.md#invocation-and-configuration).
 
-1. **Discover.** One script (`scripts/discover.sh`) detects the toolchain, test layout and available tools. Rules extracted from `CLAUDE.md` are cached; toolchain data is re-probed every run.
+1. **Discover.** One script (`scripts/discover`) detects the toolchain, test layout and available tools. Rules extracted from `CLAUDE.md` are cached; toolchain data is re-probed every run.
 2. **Deterministic gates.** Typecheck, lint and scoped tests run in parallel. New public code without a test is flagged. A failing gate becomes a finding directly, and its output is passed to the agents as a `<gate_results>` block.
 3. **Select files and agents.** `select-files.py` drops binaries, secrets, generated/vendor output and oversized files before any agent runs. `select-agents.py` picks the axes: six always run; security deep-dive, test-quality, API-contract and a11y/i18n run only when the diff contains matching files. Skipped axes are named in the report.
 4. **Review in parallel.** Axes: standards, bugs+security, DRY, consistency, simplification, security deep-dive, performance, test quality, API contract, a11y/i18n. Every spawn names its model: `opus` for behavioral axes (bugs, security, performance, API contract) and `sonnet` for the others. Each agent gets the diff in its own file order (`agent-order.py`), plus per-language rule packs from `rules/`. Completed axes are saved to `.claude/review-all/checkpoints/`, so an interrupted run picks up where it stopped.
@@ -114,7 +114,7 @@ The skill grew out of several years of daily use of Claude for code review on re
 
 **Eval suite.** There are 98 labeled cases in `skills/review-all/evals/`: 44 TypeScript, 20 Java, 11 Python, 5 Go, 4 SQL, 4 Rust. Most are recall cases, where a planted bug (race, leak, injection, N+1, broken contract…) must be reported. The rest are precision cases, where correct code that looks suspicious must not be flagged. Some cases cover gate mode, the rules cache, `REVIEW.md`, a toolchain whose tests really fail, and dismissal state that carries across runs.
 
-**Runner.** `scripts/run-evals-headless.sh` builds each fixture into a throwaway git repo and runs `/review-all` there with `claude -p`. A second LLM call then grades the report against the case's rubric. `eval-scorecard.py` adds up recall, precision and F1. Runs use `REVIEW_ALL_EVAL_RUNS=3` or more and compare pass rates, because a single run is noisy. `REVIEW_ALL_EVAL_MODEL` pins the model so two runs can be compared.
+**Runner.** `review-all eval` builds each fixture into a throwaway git repo and runs `/review-all` there with `claude -p`. A second LLM call then grades the report against the case's rubric. `eval-scorecard.py` adds up recall, precision and F1. Runs use `REVIEW_ALL_EVAL_RUNS=3` or more and compare pass rates, because a single run is noisy. `REVIEW_ALL_EVAL_MODEL` pins the model so two runs can be compared.
 
 **A/B before shipping.** A change to a persona or the verifier is run on the relevant cases with and without the change. If it gives no gain, it is reverted. A case only counts as evidence if the version without the change actually fails it. This rule has led to reverting shipped-looking work: a doc-staleness rule and a set of severity-inflation rules were dropped because the baseline already passed their cases.
 
@@ -124,12 +124,12 @@ The skill grew out of several years of daily use of Claude for code review on re
 - Some features shipped **unmeasured**: per-agent diff ordering, remembering verifier rejections, and the v0.10.2 observation rule. [`evals/README.md`](skills/review-all/evals/README.md) and the release commits say which, and why.
 - Savings from skipping work (fewer agent or verifier calls) do not show up in the report, so a report-grading harness cannot measure them.
 
-**CI without an API key** (`bash tests/run.sh`, on every push):
+**CI without an API key** (`just test`, on every push):
 - a check that no real project names appear in fixtures;
 - eval schema validation;
-- shellcheck;
-- 14 Python unit-test files, including deterministic Copilot handoff/installation/gate tests;
-- 14 `tests/check-*.sh` doc gates.
+- shared Python process, discovery, installation and Copilot handoff/gate tests;
+- migrated documentation invariants, run natively without shell scripts;
+- direct uv and shell-free just entry points on Ubuntu, macOS and Windows Server.
 
 Behavior that exists only as instructions cannot be run headlessly, so each doc gate greps the docs for the key sentence. Each gate was checked by deleting that sentence on a scratch copy and confirming the gate fails.
 
@@ -154,7 +154,7 @@ To add a language, or tighten an existing pack:
 
 1. Write `skills/review-all/rules/<lang>.md`. Terse bullets, defects only (correctness, resources, concurrency, security), max 60 lines. It must end with a `#### Do not report` section of at least 4 false positives.
 2. Add the glob to `rule_packs` in `skills/review-all/scripts/file-classes.json`, above the `**/*` catch-all.
-3. Run `bash tests/check-rule-packs.sh`.
+3. Run `just test --pattern test_documentation.py`.
 
 There is no per-project pack directory: packs are part of the skill. Make the change in a clone and `just install` it, or send a PR. Edits made inside the plugin cache are lost when the plugin updates. For rules that apply to one project only, use `REVIEW.md` or `CLAUDE.md`.
 
@@ -200,12 +200,12 @@ If the repo has a `.codegraph/` index and a CodeGraph MCP server is connected, a
 - Costs more tokens than a single-pass review, because both the agents and the verifier run.
 - The Haiku verifier can mis-score a new kind of pattern and push a real finding to the appendix. `verifierModel: "sonnet"` or `verifierVotes: 3` reduce this.
 - `state.json` is per repo and per machine. It is not shared across a team.
-- Both CLI adapters need git, bash and filesystem access; they are not web-chat uploads. Copilot-specific limits are documented [separately](docs/COPILOT.md#remaining-limits).
+- Both CLI adapters need Git, Python/uv and filesystem access; they are not web-chat uploads. Copilot-specific limits are documented [separately](docs/COPILOT.md#remaining-limits). Windows 11 smoke evidence is pending; hosted Windows Server CI is a separate validation surface.
 
 ## Development
 
-```bash
-bash tests/run.sh    # no API key needed
+```text
+just test    # no API key needed
 ```
 
 Eval schema, the case list and the iteration loop: [`skills/review-all/evals/README.md`](skills/review-all/evals/README.md).

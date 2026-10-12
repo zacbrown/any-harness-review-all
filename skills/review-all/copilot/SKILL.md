@@ -15,14 +15,15 @@ selection, cache/checkpoint reuse, and gate process handling.** It takes
 precedence over the legacy Claude-specific mechanisms in those resources.
 
 Resolve this SKILL.md's absolute installation directory as `SKILL_ROOT`.
-All helper paths are `SKILL_ROOT/scripts/...`, never relative to the reviewed
-repository's cwd. Keep the reviewed repository as the process cwd. Install
+Read `references/cli.md`; resolve TOOL as `SKILL_ROOT/../../.review-all-tool`.
+Invoke helpers through its locked/no-sync uv CLI, never a reviewed project's
+Python environment or a relative script path. Pass the reviewed repository explicitly. Install
 before invoking: this source template is assembled with the canonical workflow
 as `references/workflow.md` by the Copilot installer.
 
 ## Preconditions and boundaries
 
-- Require Python >=3.9, Git, Bash >=4, and Copilot CLI >=1.0.95 (minimum tested).
+- Require Python >=3.11, uv, Git, and Copilot CLI >=1.0.95 (minimum tested).
   Run `copilot --version`. Older/unknown versions: stop with an explicit error.
   `include-custom-instructions: true` was introduced in 1.0.86, but that
   version is not our tested compatibility floor.
@@ -52,9 +53,8 @@ Never silently choose a smaller scope to fit context or concurrency.
 Read only `.copilot/review-all.json`, not `.claude/review-all.json`. Unspecified
 review keys retain canonical defaults; replace `.claude/` state/output defaults
 with `.copilot/`, and cache paths with `.copilot/review-all/cache/`.
-Use `preflight.sh`, `detect-toolchain.sh`, and `test-pattern-probe.sh` for fresh
-discovery; do NOT call `discover.sh` on Copilot, because its cache namespace
-and CLAUDE-only instruction discovery belong to the Claude adapter.
+Use CLI `discover --harness copilot` for fresh discovery; never use the
+Claude-specific cache. Scoped Copilot instruction collection remains separate.
 Discover CI fallback commands, test scoping, template compiler requirements,
 spec existence, dependencies and optional runtime probes as in the workflow.
 `init` follows the canonical wizard, writing only Copilot configuration.
@@ -120,8 +120,8 @@ never a fabricated PASS. Use actual deterministic commands for spec/dependency
 checks too. Optional runtime observations can be put into the project profile
 with their captured commands/output; never infer a runtime PASS.
 
-```
-python3 SKILL_ROOT/scripts/copilot-package.py prepare --repo REPO --request REQUEST
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" copilot-package prepare --repo REPO --request REQUEST
 ```
 
 The returned absolute directory is RUN. For a wrapper invocation, preserve its
@@ -148,8 +148,8 @@ Live files are supporting context only when they match the target; request more
 
 For EACH assignment from `RUN/manifest.json`, run:
 
-```
-python3 SKILL_ROOT/scripts/copilot-results.py start RUN --assignment ID
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" copilot-results start RUN --assignment ID
 ```
 
 This prints the essential prompt, exact assignment path, explicit named
@@ -172,12 +172,12 @@ If capacity is unknown, use one at a time. A concurrency rejection is queued
 work, not a successful review. Do not repeatedly poll; use completion events.
 Persist the raw returned JSON as RESULT, then:
 
-```
-python3 SKILL_ROOT/scripts/copilot-results.py accept RUN --assignment ID --result RESULT
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" copilot-results accept RUN --assignment ID --result RESULT
 ```
 
 Failed dispatch/timeout:
-`copilot-results.py fail RUN --assignment ID --reason "specific failure"`.
+`review-all copilot-results fail RUN --assignment ID --reason "specific failure"`.
 If the result says `retry: true`, start the same assignment once more with a
 fresh context and the validation error preamble. At most two attempts.
 Empty complete findings are valid. Missing files, malformed output, incomplete
@@ -195,8 +195,8 @@ are recorded for history but not reused without a reliable identity.
 
 After all reviewer assignments finish or exhaust one retry:
 
-```
-python3 SKILL_ROOT/scripts/copilot-results.py verifiers RUN
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" copilot-results verifiers RUN
 ```
 
 This deduplicates accepted candidates with the canonical helper, applies global
@@ -208,13 +208,13 @@ source, scoped diff/rules, requirements, and checks -- no exploratory reasoning
 or other verifiers' judgments. Every verifier rereads cited original source.
 
 When `verifierVotes > 1`, after the first pass run
-`copilot-results.py votes RUN` and dispatch each new vote assignment independently.
+`review-all copilot-results votes RUN` and dispatch each new vote assignment independently.
 Only high-severity keep/appendix survivors receive extra votes, as in the
 canonical methodology. An unverified vote retains the unverified bucket;
 ties never keep top severity. Missing votes make the review partial.
 
-```
-python3 SKILL_ROOT/scripts/copilot-results.py finalize RUN [--severity important]
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" copilot-results finalize RUN [--severity important]
 ```
 
 This revalidates input freshness, exact assignment/chunk coverage, all candidate
@@ -232,7 +232,7 @@ Keep original confidence/severity thresholds, tally, proof and numbering.
 Present the report before the menu. Use ask_user; when multi-select is
 unavailable, use a freeform scope expression or sequential choices, never guess.
 
-After interactive finalization, run `copilot-results.py persist RUN` to maintain
+After interactive finalization, run `review-all copilot-results persist RUN` to maintain
 canonical lifecycle/history in `.copilot/review-all/`, with `harness: "copilot"`
 on state.json. It uses code-hash.py/state-sweep.py and never sweeps unseen
 findings to fixed/stale on a partial review. Human dismissal actions remain
@@ -242,8 +242,8 @@ only after checking the verdict against the original input hashes.
 Follow-up explanations and test suggestions remain read-only and use the
 coordinator inline. For an explicitly selected difficult-finding deep dive, run:
 
-```sh
-python3 SKILL_ROOT/scripts/copilot-package.py model-settings --repo REPO --role deep-dive
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" copilot-package model-settings --role deep-dive
 ```
 
 Dispatch `agent_type: review-all-deep-dive` with the returned `model` and
@@ -258,5 +258,5 @@ Scheduling is conditional on an installed host scheduler, never assumed.
 
 Gate: no menu, fixes, report or external publication. Emit only the verdict and
 one summary line, noting when REVIEW.md was modified. A tool's exit code is NOT
-Copilot's process exit code. CI must invoke `scripts/copilot-gate.py`, which
+Copilot's process exit code. CI must invoke `review-all copilot-gate`, which
 checks a fresh matching run and returns 0/1/2 itself.

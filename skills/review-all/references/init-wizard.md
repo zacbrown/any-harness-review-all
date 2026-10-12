@@ -9,7 +9,7 @@ User explicitly invoked `/review-all init`. Do NOT auto-trigger from a missing c
 ## Pre-checks
 
 1. If `.claude/review-all.json` already exists → ask via `AskUserQuestion` whether to overwrite, merge, or cancel.
-2. Run Phase 0.0 discovery first (`bash scripts/discover.sh`) — its one call covers tool availability AND language/framework detection; mention any missing tools in the summary at end and use the detected toolchain to suggest sensible defaults.
+2. Run Phase 0.0 discovery first (`review-all --repo <repo> discover`) — its one call covers tool availability AND language/framework detection; mention any missing tools in the summary at end and use the detected toolchain to suggest sensible defaults.
 
 ## Questions (via `AskUserQuestion`, one at a time)
 
@@ -24,7 +24,7 @@ Each question must have ≤4 options; user can always pick "Other" for a custom 
 | 5 | Chunking | Default chunk thresholds for big diffs? | Defaults `40 files / 200KB`, Aggressive `20 files / 100KB`, Disabled | `chunkMaxFiles`, `chunkMaxBytes` |
 
 Skip a question if it doesn't apply. Specifically:
-- Skip Q4 only when `curl` is unavailable (no curl → Phase 1.5 self-skips regardless; asking is pointless). Do NOT skip Q4 when only Playwright/Puppeteer is missing — Step 1 (health probe) still runs.
+- Skip Q4 only when the native HTTP capability is unavailable. Do NOT skip Q4 when only Playwright/Puppeteer is missing — Step 1 (health probe) still runs.
 - A skipped question records nothing. The "only explicit keys" rule below applies — omitted keys inherit documented defaults.
 
 ## Write
@@ -39,7 +39,7 @@ Also write `.claude/review-all.json.example` — a fully-populated, plain-JSON c
 
 After write, print:
 
-```
+```text
 review-all configured.
   Config:   .claude/review-all.json
   Example:  .claude/review-all.json.example

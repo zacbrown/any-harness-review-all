@@ -15,6 +15,7 @@ import tempfile
 SCRIPTS = Path(__file__).resolve().parents[1] / "skills/review-all/scripts"
 sys.path.insert(0, str(SCRIPTS))
 from copilot_common import REASONING_EFFORTS, atomic, cli_version, load_module, model_for, read_json, reasoning_for  # noqa: E402
+from portable import run
 
 INSTALL = load_module("copilot-install")
 PACKAGE = load_module("copilot-package")
@@ -22,18 +23,18 @@ RESULTS = load_module("copilot-results")
 
 
 def git(repo, *args):
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+    run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 
 
 def write(repo, path, content):
     target = repo / path
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(content)
+    target.write_text(content, encoding="utf-8")
 
 
 def events(path):
     parsed = []
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         try:
             parsed.append(json.loads(line))
         except ValueError:
@@ -141,6 +142,7 @@ def main():
               "reasoningEfforts": {"01-standards": args.reviewer_reasoning_effort,
                                    "verifier": args.verifier_reasoning_effort}}
     INSTALL.install(repo / ".github", config)
+    INSTALL.provision(repo / ".github")
     write(repo, "AGENTS.md", "Repository contract: every public CONFIG dictionary must contain audit_tag. "
           "Report a newly missing audit_tag as IMPORTANT with static proof.\n")
     write(repo, ".github/instructions/scoped.instructions.md",
@@ -174,23 +176,25 @@ def main():
     atomic(runtime / "request.json", request)
     directory = runtime / "runs/context-handoff"
     first_id = "01-standards--chunk-0001"
+    tool = repo / ".github/.review-all-tool"
+    cli = f'uv run --project "{tool}" --locked --no-sync --no-python-downloads review-all --repo "{repo}"'
     prompt = (
         "Test the installed native review-all custom SUBAGENTS, not your own review ability. "
         "Requirement supplied ONLY in this parent conversation: billing CONFIG retention_days must be exactly 47; "
         "report a changed literal violating it as IMPORTANT. "
         f"First record that requirement explicitly in {runtime / 'requirements.txt'}; "
         "do not put it in repository instructions or source. "
-        f"Run python3 {SCRIPTS / 'copilot-package.py'} prepare --repo {repo} --request {runtime / 'request.json'}. "
+        f'Run {cli} copilot-package prepare --request "{runtime / "request.json"}". '
         "Do not use a top-level --agent process. Use the task tool with the explicitly named custom agent. "
-        f"Run python3 {SCRIPTS / 'copilot-results.py'} start {directory} --assignment {first_id}. "
+        f'Run {cli} copilot-results start "{directory}" --assignment {first_id}. '
         f"Dispatch agent_type review-all-standards with model {args.reviewer_model}, "
         f"reasoning_effort {args.reviewer_reasoning_effort}, and the returned prompt. "
         "Write the child's exact JSON response, unmodified, "
         f"to {directory / 'reviewer-result.json'}. "
-        f"Then invoke python3 {SCRIPTS / 'copilot-results.py'} accept {directory} "
+        f'Then invoke {cli} copilot-results accept "{directory}" '
         f"--assignment {first_id} --result {directory / 'reviewer-result.json'}. "
         "If malformed, use start and retry once with the exact same inputs and save the raw retry. "
-        f"Invoke python3 {SCRIPTS / 'copilot-results.py'} verifiers {directory}. "
+        f'Invoke {cli} copilot-results verifiers "{directory}". '
         "Read the resulting verification.json, start every verifier assignment with copilot-results.py start, "
         f"and dispatch agent_type review-all-verifier with model {args.verifier_model}, "
         f"reasoning_effort {args.verifier_reasoning_effort}, and that start prompt in a fresh context. "
@@ -205,9 +209,9 @@ def main():
                "--no-ask-user", "--disable-builtin-mcps", "--no-auto-update", "--output-format", "json",
                "--add-dir", str(SCRIPTS), "--add-dir", str(out)]
     transcript = out / "transcript.jsonl"
-    with transcript.open("w") as stdout, (out / "stderr.txt").open("w") as stderr:
+    with transcript.open("w", encoding="utf-8") as stdout, (out / "stderr.txt").open("w", encoding="utf-8") as stderr:
         try:
-            proc = subprocess.run(command, stdout=stdout, stderr=stderr, timeout=args.timeout)
+            proc = run(command, cwd=repo, stdout=stdout, stderr=stderr, timeout=args.timeout)
         except subprocess.TimeoutExpired:
             atomic(out / "result.json", {"passed": False, "cliVersion": version, "error": "CLI timeout", "repo": str(repo)})
             print(f"FAIL: CLI timeout; evidence in {out}", file=sys.stderr)
@@ -237,8 +241,8 @@ def main():
         )
         missing_command = command.copy()
         missing_command[missing_command.index("-p") + 1] = missing_prompt
-        with (out / "missing-transcript.jsonl").open("w") as stdout, (out / "missing-stderr.txt").open("w") as stderr:
-            missing_proc = subprocess.run(missing_command, stdout=stdout, stderr=stderr, timeout=args.timeout)
+        with (out / "missing-transcript.jsonl").open("w", encoding="utf-8") as stdout, (out / "missing-stderr.txt").open("w", encoding="utf-8") as stderr:
+            missing_proc = run(missing_command, cwd=repo, stdout=stdout, stderr=stderr, timeout=args.timeout)
         if missing_proc.returncode:
             errors.append(f"missing-context parent exited {missing_proc.returncode}")
         missing_stream = events(out / "missing-transcript.jsonl")

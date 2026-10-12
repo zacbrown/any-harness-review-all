@@ -53,7 +53,7 @@ The chosen scope feeds the [apply-fixes sub-menu](#apply-fixes-sub-menu) (same r
 
 ### Custom expression grammar
 
-```
+```text
 C  I  D  S        severity letters (case-insensitive)
                   C = 🔴 Critical   I = 🟠 Important   D = 🟡 Debt   S = 🔵 Suggested
 #11   11          single finding (# prefix optional)
@@ -147,14 +147,14 @@ Builds on Deep-dive but is driven by the user's specific question (keep both: De
 ### Generate tests for a finding
 A deliberate, **confirmed** exception to the "never create new files as part of a fix" guardrail — that rule stays in force for AUTO-fixes; this is a separate, user-initiated, confirmation-gated action. Also auto-offered after a clean apply-fixes/auto-delta.
 1. Prompt for the finding number (validate). Resolve the source file from `file_line`.
-2. Read `toolchain.testPattern` (from `scripts/test-pattern-probe.sh`: framework + suffix + layout). Compute the conventional test path:
+2. Read `toolchain.testPattern` (from `scripts/test-pattern-probe`: framework + suffix + layout). Compute the conventional test path:
    - co-located → sibling `<basename><suffix>`;
    - separate-tree → mirror under `tests/`/`test/` with `<suffix>`;
    - **DEGRADED** (`framework == "unknown"` OR `suffix == ""`): do NOT guess a framework. Tell the user the convention couldn't be detected, show the finding + a language-appropriate skeleton, and offer "write to <best-guess path>" vs "show only". Never fabricate a jest/pytest setup the repo doesn't use (project-agnostic principle).
 3. Glob the computed path to check existence (append vs create). Read it + 1–2 sibling tests for style, and pass them to the generator as exemplars.
 4. Spawn a generator agent (`subagent_type: general-purpose`, `model: sonnet`; read-only inputs; returns test code as text — does NOT write).
 5. **SHOW the proposed path + full test code, then CONFIRM before any Write** (`AskUserQuestion`: `Write to <path>` / `Append to existing <path>` / `Show only` / `Cancel`). Only an explicit write choice triggers `Write` (append case: Read-then-Edit — Read-before-Edit still applies).
-6. Optionally run the SCOPED test command (`<test_cmd> <path>` via `timeout`) if `toolchain.commands.test` exists.
+6. Optionally run the SCOPED test command (`<test_cmd> <path>` via CLI `execute` with a timeout) if `toolchain.commands.test` exists.
 7. If tests FAIL: show the failure and STOP — do NOT auto-fix the test or the source (consistent with never-auto-rollback; the user decides).
 8. Return to the caller.
 
@@ -192,7 +192,7 @@ After all edits, re-run Phase 1 gates against the modified tree, then print this
 
 ## Fix Results
 
-```
+```text
 - Scope: {chosen}
 - Applied: N | Manual follow-up: M | Skipped: K | Guardrail-blocked: G
 - Post-fix gates: Typecheck ✅/❌, Lint ✅/❌, Tests ✅/❌

@@ -3,7 +3,7 @@ name: review-all
 description: "Multi-agent code review for diffs (project-agnostic). Covers standards, bugs, security, DRY, smells, perf, tests, API contracts, a11y/i18n. Verifies each finding to eliminate false positives. Use for /review-all, pre-PR/pre-commit review, or auditing uncommitted/staged changes."
 argument-hint: "[target] [--paths a,b] [--exclude x,y]"
 effort: high
-allowed-tools: Bash(git diff:*) Bash(git log:*) Bash(git status:*) Bash(git show:*) Bash(git merge-base:*) Bash(git blame:*) Bash(gh pr diff:*) Bash(gh pr view:*) Bash(gh pr comment:*) Bash(gh issue create:*) Bash(lsof:*) Bash(timeout:*) Bash(bash:*) Bash(python3:*) Bash(mkdir:*) Read Glob Grep Write Edit AskUserQuestion
+allowed-tools: Bash(git diff:*) Bash(git log:*) Bash(git status:*) Bash(git show:*) Bash(git merge-base:*) Bash(git blame:*) Bash(gh pr diff:*) Bash(gh pr view:*) Bash(gh pr comment:*) Bash(gh issue create:*) Bash(uv:*) Bash(just:*) Read Glob Grep Write Edit AskUserQuestion
 ---
 
 <!-- effort: high is a recall FLOOR. Per Anthropic's Opus 4.8 prompting guidance, a review harness run at low/medium effort does the same investigation but reports fewer findings ("converting fewer investigations into reported findings") — recall silently drops. `high` is Opus 4.8's own default; pinning it here keeps review at the recommended minimum even when the session was lowered for cost. Raise to `xhigh` for maximum recall on critical reviews (costs more tokens). -->
@@ -13,9 +13,9 @@ allowed-tools: Bash(git diff:*) Bash(git log:*) Bash(git status:*) Bash(git show
 
 ## Surface
 
-**Claude Code only.** This skill orchestrates git, gh, lsof/ss, curl, jq, and shell scripts via Bash, and relies on filesystem access for sibling reference reads. Not portable to claude.ai uploads or the Claude API runtime (no network access, no shell, no on-disk skill tree). The `allowed-tools` frontmatter field is honored by Claude Code as a slash-command convention; on other surfaces it has no effect.
+**Claude Code adapter.** Shared Python tooling runs natively through uv on Windows, Linux and macOS. Filesystem/process access is required; this is not a claude.ai upload or bare Claude API skill. The host's tool named `Bash` may itself impose a shell requirement; the package and just recipes do not.
 
-**Prerequisites**: agent personas live alongside this file at `agents/` and phase reference docs at `references/`. The installer (`just install`, which runs `rsync` per the repo `justfile`) copies the entire `skills/review-all/` directory to `~/.claude/skills/review-all/`, so the relative layout is identical in-repo and installed: this file Reads `agents/<id>.md` and `references/<name>.md` by sibling path at runtime.
+**Prerequisites**: read **`references/cli.md`** before invoking tooling. Resolve TOOL independently of the reviewed repository and use the full locked/no-sync uv prefix documented there. In an installed skill TOOL is `SKILL_ROOT/../../.review-all-tool`; resources remain siblings of this file. `just setup` followed by `just install` provisions an ownership-tracked, self-contained installation. An incomplete installation is a hard error, never a reason to skip deterministic review behavior.
 
 You are a comprehensive, project-agnostic code review orchestrator. You combine simplification analysis, code quality/smell detection, deterministic toolchain gates, and deep heuristic review into a single unified local review. Launch teams of parallel agents for speed and coverage, then verify every finding independently before reporting.
 
@@ -59,11 +59,11 @@ You are a comprehensive, project-agnostic code review orchestrator. You combine 
 
 Execute the bundled script.
 
-```bash
-bash scripts/discover.sh
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" discover
 ```
 
-It composes `preflight.sh` (tool availability), `detect-toolchain.sh` (steps 0.3 + 0.4), `test-pattern-probe.sh` (step 0.6), probes `.codegraph/`, and checks the rules cache — do NOT run those scripts separately. It exits non-zero only when `git` (the only hard requirement) is missing → abort with explicit error. Parse its single JSON output into the Project Profile:
+It composes native preflight, toolchain and test-pattern discovery, probes `.codegraph/`, and checks the rules cache — do NOT run these operations separately. Missing Git, invalid manifests or execution errors abort explicitly. Parse its single JSON output into the Project Profile:
 
 | Field | Goes to | Meaning |
 |-------|---------|---------|
@@ -76,14 +76,9 @@ It composes `preflight.sh` (tool availability), `detect-toolchain.sh` (steps 0.3
 | Tool | Required? | If missing |
 |------|-----------|------------|
 | `git` | required | abort with explicit error — nothing in this skill works without git |
-| `timeout` | optional | GNU coreutils — present by default on Linux, absent on macOS without `brew install coreutils`. If missing → run gate commands without wall-clock cap; agent harness's per-tool timeout is the backstop. Surface one 🟠 IMPORTANT gate row: `Toolchain: timeout(1) missing — gates ran uncapped`. |
-| `lsof` | optional | fall back to `ss -ltn` for port checks; if both missing → skip dev-server detection, do NOT skip the build gate |
-| `ss`   | optional | fallback for `lsof` |
 | `gh`   | optional | the `PR #N` target in Step 0.1 is unavailable — reject that argument with clear message |
-| `jq`   | optional | parse JSON inline via Read instead |
-| `curl` | optional | Phase 1.5 runtime probe is skipped |
-| `rsync` | optional | only the manual installer (`just install`) uses it — the review flow never requires it |
-| `python3` | optional | `dedupe.py` / `state-sweep.py` / `export-findings.py` / `gate-verdict.py` need it. If missing → dedupe + state sweep degrade to LLM-side grouping, the Export action is unavailable, and gate mode must fail with an explicit message (its verdict JSON comes from `gate-verdict.py`). Rules cache degrades to MISS when `jq` is also missing. |
+| Python / uv | required | setup must have provisioned the tool's own environment |
+| `capabilities.timeouts/tcp/http/hashing` | built in | Python provides these without Unix utility names |
 
 Downstream phases MUST consult `toolchain.available` before invoking a tool. Never assume.
 
@@ -174,7 +169,7 @@ If `.claude/review-all.json` exists, read it. Schema (jsonc — written as plain
 ```
 All keys optional — use defaults if missing. The authoritative per-key table, with the rationale behind every default, lives in `references/config-keys.md`; this block must list exactly the same key set.
 
-**Rules cache** (verdict already computed by `discover.sh` in Step 0.0):
+**Rules cache** (verdict already computed by `discover` in Step 0.0):
 
 - `cache.status == "HIT"` → take the extracted global rules from `cachedProfile.rules.global` and skip the GLOBAL half of Step 0.5. On HIT do NOT re-read root CLAUDE.md or any file listed in `cachedProfile.ruleSources`. Module-level CLAUDE.md files in changed-file directories are still read fresh (Step 0.5 — diff-scoped, never cached).
 - `cache.status == "MISS"` → run Step 0.5 in full, then write the cache at the end of Phase 0 (see Step 0.9).
@@ -184,18 +179,18 @@ Cached profile schema v2 — `.claude/cache/review-all-profile.json`:
 ```json
 {
   "schemaVersion": 2,
-  "cacheKey": "<copied verbatim from discover.sh output>",
+  "cacheKey": "<copied verbatim from discover output>",
   "createdAt": "<ISO timestamp>",
   "rules": { "global": "<extracted global rules text>" },
   "ruleSources": ["CLAUDE.md", "docs/conventions.md"]
 }
 ```
 
-The cache stores LLM-extracted rules text ONLY — never toolchain commands, test patterns, or tool availability. Those are re-probed fresh by `discover.sh` on every run, so they can never be served stale (a `package.json`/`pom.xml` change takes effect immediately, cache or no cache). The key covers every repo CLAUDE.md plus root `CLAUDE.local.md` as a manifest of per-file content hashes (content, not mtimes — `git checkout` does not bump mtimes); `~/.claude/CLAUDE.md` is user memory, not project conventions — excluded from both key and extraction. HIT additionally requires `schemaVersion == 2` and cache-file age ≤ 7 days (backstop for staleness the key cannot see, e.g. an edited guide referenced from CLAUDE.md). Legacy `claudeMdHash`-era cache files fail the schema check → MISS.
+The cache stores LLM-extracted rules text ONLY — never toolchain commands, test patterns, or tool availability. Those are re-probed fresh by `discover` on every run, so they can never be served stale (a `package.json`/`pom.xml` change takes effect immediately, cache or no cache). The key covers every repo CLAUDE.md plus root `CLAUDE.local.md` as a manifest of per-file content hashes (content, not mtimes — `git checkout` does not bump mtimes); `~/.claude/CLAUDE.md` is user memory, not project conventions — excluded from both key and extraction. HIT additionally requires `schemaVersion == 2` and cache-file age ≤ 7 days (backstop for staleness the key cannot see, e.g. an edited guide referenced from CLAUDE.md). Legacy `claudeMdHash`-era cache files fail the schema check → MISS.
 
 ### Step 0.3 + 0.4 — Detect Language, Framework, and Toolchain
 
-Folded into Step 0.0 — `discover.sh` already ran `detect-toolchain.sh`; do NOT run it separately. One LLM-side fallback remains per-run: if a command field is empty AND the CI config (`.github/workflows/`, `.circleci/`) suggests a command, fall back to that — the script does not parse CI configs.
+Folded into Step 0.0 — `discover` already ran `detect-toolchain`; do NOT run it separately. One LLM-side fallback remains per-run: if a command field is empty AND the CI config (`.github/workflows/`, `.circleci/`) suggests a command, fall back to that — the script does not parse CI configs.
 
 ### Step 0.5 — Discover Project Rules
 
@@ -209,7 +204,7 @@ Two halves with different cache behavior:
 
 ### Step 0.6 — Detect Test Patterns
 
-Folded into Step 0.0 — `discover.sh` already ran `test-pattern-probe.sh`; do NOT run it separately. The `testPattern` fields feed the Spec Existence Check (Phase 1).
+Folded into Step 0.0 — `discover` already ran `test-pattern-probe`; do NOT run it separately. The `testPattern` fields feed the Spec Existence Check (Phase 1).
 
 ### Step 0.7 — CodeGraph Detection & MCP tool resolution
 
@@ -235,10 +230,8 @@ This makes the skill portable across MCP namespaces and survives codegraph-serve
 
 **Deterministic pre-dispatch selection.** Before anything is sliced, run the selector over the changed-file list. It is a pure function — no git, no LLM, no filesystem walk — so a dry run and the real run consume one answer instead of each deriving their own:
 
-```bash
-echo "$FILE_RECORDS_JSON" | python3 scripts/select-files.py \
-  --exclude "<--exclude prefixes>" --paths "<--paths prefixes>" \
-  --max-file-diff-bytes <maxFileDiffBytes>
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" --input "<input.json>" select-files    --exclude "<--exclude prefixes>" --paths "<--paths prefixes>"    --max-file-diff-bytes <maxFileDiffBytes>
 ```
 
 `$FILE_RECORDS_JSON` is one record per changed file — `{"path", "status", "insertions", "deletions", "bytes"}` — built from `git diff --numstat` (binary files report `-`/`-`, which becomes `null`) plus `--name-status` for the status letter and the per-file slice size for `bytes`.
@@ -258,39 +251,39 @@ The gate order is load-bearing and lives in `scripts/select-files.py`: **secret 
 
 **Report what was dropped.** The excluded counts go on the Phase 0 heartbeat and into the Phase 3 report (`references/phase-3-report.md`). A file removed from a review silently is the failure mode this layer risks introducing, so it is never silent.
 
-`python3` missing (Phase 0.0) → selection self-skips: every changed file is reviewable and every axis spawns, exactly as before. Like checkpointing, it is an optimization and never a correctness dependency.
+An incomplete installation is an error; do not bypass selection.
 
 ### Step 0.9 — Ensure Output Directories Exist, Write Rules Cache on MISS
 
 Before any later phase writes, create the directories used by this orchestrator (idempotent — only run once per invocation).
 
-```bash
-mkdir -p .claude/cache .claude/reports .claude/review-all
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" mkdir .claude/cache .claude/reports .claude/review-all
 ```
 
 Without this, the first `Write` to `.claude/review-all/history.jsonl`, `.claude/review-all/state.json`, or `.claude/review-all/shots/...` on fresh repo crashes.
 
-If Step 0.0 reported a cache MISS: after the `mkdir`, write `.claude/cache/review-all-profile.json` using the v2 schema from Step 0.2, copying `schemaVersion` and `cacheKey` VERBATIM from the discover output — never recompute the key yourself (one hash implementation lives in `discover.sh`).
+If Step 0.0 reported a cache MISS: after the `mkdir`, write `.claude/cache/review-all-profile.json` using the v2 schema from Step 0.2, copying `schemaVersion` and `cacheKey` VERBATIM from the discover output — never recompute the key yourself (one hash implementation lives in `discover`).
 
 ---
 
 ## Phase 1: Deterministic Gates
 
-**Goal**: Run automated checks. Independent checks run IN PARALLEL via Bash with timeouts.
+**Goal**: Run automated checks. Independent checks run IN PARALLEL via the CLI `execute` operation with explicit repository cwd and timeouts. Write each command as a JSON argv spec; use discovered `toolchain.commands` arrays, not raw package-script text.
 
 ### Dev-server detection
 
 Execute the bundled script (passing the configured port list, default `4200,5173,3000,8080`).
 
-```bash
-bash scripts/dev-server-probe.sh "4200,5173,3000,8080"
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" dev-server-probe "4200,5173,3000,8080"
 ```
 
 Output JSON: `{"open":[4200],"closed":[5173,3000,8080]}`. If any open port matches the detected framework's typical dev-server port, the build gate MAY be satisfied by the dev server — but only under the liveness proof below.
 
 **Dev-server substitution requires proof, not assumption.** "A dev server is probably running" is the single easiest way to report a build that never happened: a stale log from a previous session is byte-identical to a fresh success. Before recording the build/typecheck gate as PASS on the strength of a dev server, ALL of:
 
-1. The port is **open right now** (`dev-server-probe.sh` reported it in `open` this run — not "it usually is").
+1. The port is **open right now** (`dev-server-probe` reported it in `open` this run — not "it usually is").
 2. You identified the server's log/output file and read its **mtime**.
 3. That mtime is **newer than the newest file in the diff**. If the log predates the code under review, it cannot describe it.
 4. The log's tail shows a **successful completion marker** (e.g. `Application bundle generation complete`, `compiled successfully`) with no error lines after it.
@@ -301,9 +294,9 @@ If any of 1–4 fails → do NOT record PASS. Record `SKIP(stale-dev-server: <re
 
 | Gate | Command | Timeout |
 |------|---------|---------|
-| Typecheck | `timeout 120 <typecheck_cmd>` | 2 min |
-| Lint | `timeout 120 <lint_cmd>` | 2 min |
-| Tests | `timeout 180 <test_cmd> <scoped>` | 3 min |
+| Typecheck | `execute` with typecheck argv and `timeoutSeconds: 120` | 2 min |
+| Lint | `execute` with lint argv and `timeoutSeconds: 120` | 2 min |
+| Tests | `execute` with scoped package-manager/test argv and `timeoutSeconds: 180` | 3 min |
 
 ### Test scoping (smart)
 
@@ -329,7 +322,7 @@ If any manifest/lockfile changed (`package.json`, `pom.xml`, `build.gradle`, `Ca
 
 **Every gate row carries its provenance.** A bare `PASS` is unfalsifiable — the reader cannot tell a command you ran from a log you glanced at. Record, per gate: the **exact command**, its **exit code**, and the **wall-clock time you ran it**.
 
-```
+```text
 Typecheck:      PASS | FAIL(N errors) | SKIP(reason) | TIMEOUT | N/A   [cmd: <command> · exit: <code> · at: <HH:MM:SS>]
 Lint:           PASS | FAIL(N issues) | SKIP(reason) | TIMEOUT | N/A   [cmd: … · exit: … · at: …]
 Tests:          PASS | FAIL(N failures) | SKIP(reason) | TIMEOUT | N/A [cmd: … · exit: … · at: …]
@@ -354,7 +347,7 @@ Findings from gate failures are tagged `confidence: VERIFIED` — skip the verif
 
 Detailed run conditions, health-probe rules, screenshot/visual-diff flow, configuration live in **`references/phase-1.5-runtime.md`** (sibling of this file). Read it before running this phase.
 
-Self-skipping: in `auto` mode runs only when dev-server port is open, UI files are in the diff, and `curl` is available; `force` mode skips the UI-files check (curl is still required). Any failure inside the phase degrades to `Runtime probe: SKIPPED (<reason>)` — never blocks Phase 2.
+Self-skipping: in `auto` mode runs only when dev-server port is open, UI files are in the diff, and `capabilities.http` is available; `force` mode skips the UI-files check (native HTTP is still required). Any failure inside the phase degrades to `Runtime probe: SKIPPED (<reason>)` — never blocks Phase 2.
 
 ---
 
@@ -379,9 +372,8 @@ Read `references/phase-2-agents.md` (sibling of this file) for diff-slice mappin
 
 **The spawn set is computed, not judged.** Feed Step 0.8's selector output to the agent selector and spawn exactly what it returns:
 
-```bash
-echo "$SELECT_FILES_JSON" | python3 scripts/select-agents.py \
-  --extra "<extraAgents>" --skip "<skipAgents>"
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" --input "<input.json>" select-agents    --extra "<extraAgents>" --skip "<skipAgents>"
 ```
 
 Output: `{"agents": {"<id>": {"spawn", "files", "reason"}}, "rule_packs": {"<pack>.md": [paths]}, "counts"}`.
@@ -390,7 +382,7 @@ Spawn every axis with `spawn: true` and give it the `files` listed for it — th
 
 This replaces a judgment call with a computation. The conditional axes previously carried their own `**Only spawn this agent if** …` text, which can only take effect *after* the agent is already running — a backend-only diff still paid four spawns to be told there was nothing to review. Those persona lines remain as a fallback for a manually spawned agent, but the orchestrator no longer relies on them.
 
-`python3` missing → spawn the full set as before.
+An incomplete installation is an error; do not change the spawn set.
 
 **Spawn contract — every spawn names its model and its type.** Spawn each agent as a **fresh** subagent (`subagent_type: general-purpose`; never a context-inheriting type such as `fork` — the persona plus the blocks below must be the agent's ONLY framing, and an inheriting spawn re-pays this orchestrator's whole context) and pass an **explicit `model`**. Never spawn without one: an omitted `model` silently inherits the parent session's tier, which pins mechanical axes to the same expensive tier as the bug hunters.
 
@@ -398,8 +390,8 @@ The tier is declared per axis in the persona's own frontmatter `model:` field (`
 
 **Checkpoint resume — never re-run an axis that already finished.** Once the spawn set is final (spawn conditions + `extraAgents`/`skipAgents`), ask the checkpoint store what is already done:
 
-```bash
-git diff <resolved range> -- <filtered file list> | python3 scripts/checkpoint.py load --head "$(git rev-parse HEAD)" --dir <checkpointDir>
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" --input "<filtered.diff>" checkpoint load --head "<HEAD>" --dir <checkpointDir>
 ```
 
 **Pipe the resolved, FILTERED diff** — the exact bytes the agents will review, after `--paths`/`--exclude` and the multi-workspace scope prompt (Step 0.1). Never the raw range: two runs over the same range under different `--paths` must not share a key. For a `PR #N` target, pipe `gh pr diff N` through the same filter. Pipe it — never inline the diff text in the command. Output: `{"runKey", "checkpointDir", "resumed": {"<axis>": {"savedAt", "findings"}}, "ignored": [...]}`. For every axis in `resumed`, do **NOT** spawn it — take its `findings` as that agent's return, and mark it resumed for the Phase 3 report. Spawn the remaining axes normally. `ignored` lists checkpoints written under a different key; `load` has already deleted them, so they need no mention.
@@ -408,16 +400,15 @@ The key covers HEAD, the exact diff bytes, the agent personas + `SKILL.md`, and 
 
 **Checkpoint on return.** As each agent returns (Phase 2, before dedupe), persist it:
 
-```bash
-echo "$AGENT_FINDINGS_JSON" | python3 scripts/checkpoint.py save \
-  --run-key "<runKey from load>" --axis "<agent id, e.g. 02-bugs-security>" --head "$HEAD_SHA" --dir <checkpointDir>
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" --input "<input.json>" checkpoint save    --run-key "<runKey from load>" --axis "<agent id, e.g. 02-bugs-security>" --head "<HEAD>" --dir <checkpointDir>
 ```
 
 - Save only a **complete, well-formed** return. An agent that timed out, errored, returned malformed output, or — when chunked — has any chunk missing is NOT checkpointed: a partial axis must re-run, never resume. Checkpoint a chunked agent once, after merging all its chunks.
 - An empty findings array is a legitimate result — save `[]`. Re-running an axis that correctly found nothing is exactly the waste this exists to stop.
 - Save findings **as returned** — pre-dedupe, pre-verification. This store is independent of `state.json` (which tracks per-finding lifecycle across *different* diffs) and the two must stay so.
 - Writes are atomic, one file per axis, so a run killed mid-write leaves the previous file intact.
-- `python3` missing (Phase 0.0) → checkpointing self-skips: spawn every axis as before. It is an optimization, never a correctness dependency.
+- An incomplete installation is an error; repair setup before reviewing.
 
 **Load each persona once, with `Read`, and reuse the text.** `_shared.md` is read once per run and
 reused for every spawn; each `agents/<id>.md` is read once for the agent it describes — and only for
@@ -433,7 +424,7 @@ every remaining turn of the session, on top of the copy each agent gets.
 
 For each agent you spawn: pass its persona + `_shared.md` (concatenated) + the diff slice as the prompt. Wrap each part in XML tags so the agent parses the prompt unambiguously (Anthropic prompt-structuring best practice for prompts that mix instructions with variable inputs). **Canonical block order** — same in every agent prompt and in the Phase 2.5 verifier prompt, blocks marked `?` omitted when empty or absent:
 
-```
+```text
 <review_instructions>?  <persona>  <shared_rules>  <language_rules>?  <project_profile>  <gate_results>?  <previously_dismissed>?  <diff>
 ```
 

@@ -41,17 +41,19 @@ import os
 import subprocess
 import sys
 import tempfile
+from discovery import discover
+from portable import run
 
 
 def git(repo, *args):
-    subprocess.run(["git", "-C", repo, *args], check=True,
+    run(["git", "-C", repo, *args], check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def write(repo, rel, content):
     path = os.path.join(repo, rel)
     os.makedirs(os.path.dirname(path) or repo, exist_ok=True)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8", newline="") as f:
         f.write(content)
 
 
@@ -60,13 +62,10 @@ def seed_profile_cache(repo, seed):
     os.makedirs(cache_dir, exist_ok=True)
     target = os.path.join(cache_dir, "review-all-profile.json")
     if "raw" in seed:
-        with open(target, "w") as f:
+        with open(target, "w", encoding="utf-8") as f:
             json.dump(seed["raw"], f)
         return
-    here = os.path.dirname(os.path.abspath(__file__))
-    out = subprocess.run(["bash", os.path.join(here, "discover.sh"), repo],
-                         check=True, capture_output=True, text=True)
-    disc = json.loads(out.stdout)
+    disc = discover(repo)
     profile = {
         "schemaVersion": disc["schemaVersion"],
         "cacheKey": disc["cacheKey"],
@@ -74,7 +73,7 @@ def seed_profile_cache(repo, seed):
         "rules": {"global": seed.get("rules", "")},
         "ruleSources": seed.get("ruleSources", ["CLAUDE.md"]),
     }
-    with open(target, "w") as f:
+    with open(target, "w", encoding="utf-8") as f:
         json.dump(profile, f)
 
 
@@ -93,7 +92,7 @@ def seed_state_file(repo, seed):
     os.makedirs(state_dir, exist_ok=True)
     target = os.path.join(state_dir, "state.json")
     if "raw" in seed:
-        with open(target, "w") as f:
+        with open(target, "w", encoding="utf-8") as f:
             json.dump(seed["raw"], f)
         return
     here = os.path.dirname(os.path.abspath(__file__))
@@ -108,14 +107,14 @@ def seed_state_file(repo, seed):
             else:
                 args = ["anchorless", file_line,
                         entry.get("severity", ""), key]
-            out = subprocess.run([sys.executable, hasher] + args,
+            out = run([sys.executable, hasher] + args,
                                  check=True, capture_output=True, text=True)
             entry["code_hash"] = out.stdout.strip()
         if "verifier_version" not in entry:
             entry["verifier_version"] = current_verifier_version()
         findings[key] = entry
     state = {"version": 1, "migrations": [], "findings": findings}
-    with open(target, "w") as f:
+    with open(target, "w", encoding="utf-8") as f:
         json.dump(state, f)
 
 
@@ -123,7 +122,7 @@ def main():
     if len(sys.argv) < 2:
         print("usage: materialize-fixture.py FIXTURE.json [DEST_DIR]", file=sys.stderr)
         sys.exit(2)
-    with open(sys.argv[1]) as f:
+    with open(sys.argv[1], encoding="utf-8") as f:
         spec = json.load(f)
     fx = spec.get("fixture", {})
     repo = sys.argv[2] if len(sys.argv) > 2 else tempfile.mkdtemp(prefix="review-all-eval-")

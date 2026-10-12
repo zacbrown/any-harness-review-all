@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
-import subprocess
+from portable import run as process_run
 import tempfile
 from datetime import datetime, timezone
 
@@ -54,7 +54,7 @@ def now():
 
 
 def run(argv, cwd=None, **kwargs):
-    proc = subprocess.run(argv, cwd=cwd, capture_output=True, **kwargs)
+    proc = process_run(argv, cwd=cwd, capture_output=True, **kwargs)
     if proc.returncode:
         raise ValueError(f"{argv!r} exited {proc.returncode}: {proc.stderr.decode(errors='replace')}")
     return proc.stdout
@@ -118,7 +118,7 @@ def adapt(text):
 def persona_text(axis):
     # Preserve methodology, replace only the legacy bare-array return format
     # with the versioned per-dispatch envelope.
-    text = adapt(body((SKILL / "agents" / (axis + ".md")).read_text()))
+    text = adapt(body((SKILL / "agents" / (axis + ".md")).read_text(encoding="utf-8")))
     return text.split("## Return format", 1)[0]
 
 

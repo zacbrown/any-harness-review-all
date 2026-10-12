@@ -33,6 +33,7 @@ class CheckpointCase(unittest.TestCase):
         os.makedirs(os.path.join(self.skill, "scripts"))
         os.makedirs(os.path.join(self.skill, "agents"))
         shutil.copy(SCRIPT, os.path.join(self.skill, "scripts", "checkpoint.py"))
+        shutil.copy(os.path.join(SKILL_ROOT, "scripts", "portable.py"), os.path.join(self.skill, "scripts", "portable.py"))
         self.write(os.path.join(self.skill, "SKILL.md"), "# skill\n")
         self.write(os.path.join(self.skill, "agents", "01-standards.md"), "persona v1\n")
         self.script = os.path.join(self.skill, "scripts", "checkpoint.py")
@@ -60,6 +61,12 @@ class CheckpointCase(unittest.TestCase):
 class TestKey(CheckpointCase):
     def test_key_is_stable_across_invocations(self):
         self.assertEqual(self.load()["runKey"], self.load()["runKey"])
+
+    def test_environment_change_invalidates_key(self):
+        previous = self.load()["runKey"]
+        with open(os.path.join(self.skill, "scripts", "portable.py"), "a", encoding="utf-8") as stream:
+            stream.write('\ndef environment_identity():\n    return {"system": "different"}\n')
+        self.assertNotEqual(previous, self.load()["runKey"])
 
     def test_key_changes_with_head(self):
         self.assertNotEqual(self.load(head="sha1")["runKey"],

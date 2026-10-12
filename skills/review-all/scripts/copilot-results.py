@@ -2,8 +2,6 @@
 """Validate dispatch completion, assemble independent verifier inputs, emit fresh verdicts."""
 
 import argparse
-from contextlib import contextmanager
-import fcntl
 import json
 import os
 from pathlib import Path
@@ -12,6 +10,7 @@ import sys
 
 from copilot_common import SCHEMA, SKILL, agent_id, atomic, digest, encoded, load_module
 from copilot_common import RUNTIME, model_for, now, persona_text, read_json, reasoning_for, run, state_path
+from portable import file_lock
 
 PACKAGE = load_module("copilot-package")
 GATE = load_module("gate-verdict")
@@ -26,14 +25,8 @@ def state(directory):
     return read_json(path) if path.exists() else {"schemaVersion": SCHEMA, "jobs": {}}
 
 
-@contextmanager
 def completion_lock(directory):
-    with (Path(directory) / ".completion.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(lock, fcntl.LOCK_UN)
+    return file_lock(Path(directory) / ".completion.lock")
 
 
 def assignments(directory, manifest):
@@ -246,7 +239,7 @@ def make_verifiers(directory, votes=False):
         vote_numbers = [1]
     writer = PACKAGE.Writer(directory)
     common = [p for k, values in manifest["context"].items() if k not in {"exactDiff", "resultContract"} for p in values]
-    contract = (SKILL / "copilot/result-contract.md").read_text()
+    contract = (SKILL / "copilot/result-contract.md").read_text(encoding="utf-8")
     contract = contract.split("## Reviewer findings", 1)[0] + "## Verifier findings" + contract.split("## Verifier findings", 1)[1]
     common += writer.store("verifier-result-contract", contract.encode())
     persona = writer.store("verifier-persona", persona_text("verifier").encode())
@@ -413,7 +406,7 @@ def persist_state(directory):
              str(directory / "seen-keys.json")],
             env={**os.environ, "STATE_SWEEP_CHANGED_KEYS": str(directory / "changed-keys.json")})
         current = read_json(path)
-    verifier_text = (SKILL / "agents/verifier.md").read_text()
+    verifier_text = (SKILL / "agents/verifier.md").read_text(encoding="utf-8")
     version = next(int(line.split(":", 1)[1]) for line in verifier_text.splitlines() if line.startswith("version:"))
     stamp = now()
     history = history_path.read_bytes() if history_path.exists() else b""

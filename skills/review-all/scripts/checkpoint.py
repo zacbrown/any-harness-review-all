@@ -13,11 +13,12 @@ when the next run is reviewing *exactly* the same thing with *exactly* the same
 reviewer definitions. That is the whole safety argument, so the key is broad:
 
   runKey = sha256(
-      "review-all-checkpoint-v1"
+      "review-all-checkpoint-v2"
     + skillFingerprint   # sha256 manifest of SKILL.md + agents/*.md
     + headSha            # git HEAD of the reviewed repo
     + diffHash           # sha256 of the exact diff under review (stdin)
     + promptInputsHash   # sha256 manifest of REVIEW.md + .claude/review-all.json
+    + environment        # operating system, architecture, Python version
   )
 
 Any of: a new commit, an edited working tree, a narrowed `--paths` scope, an
@@ -49,9 +50,10 @@ import os
 import re
 import sys
 import tempfile
+from portable import environment_identity
 
 SCHEMA_VERSION = 1
-KEY_PREFIX = "review-all-checkpoint-v1"
+KEY_PREFIX = "review-all-checkpoint-v2"
 DEFAULT_DIR = ".claude/review-all/checkpoints"
 # Files whose content defines what a reviewer axis does. An edit to any of them
 # can change that axis's findings, so it must invalidate the checkpoint.
@@ -106,7 +108,8 @@ def prompt_inputs_hash():
 
 def run_key(skill_root, head, diff_bytes):
     parts = (KEY_PREFIX, skill_fingerprint(skill_root), head,
-             sha256_bytes(diff_bytes), prompt_inputs_hash())
+             sha256_bytes(diff_bytes), prompt_inputs_hash(),
+             json.dumps(environment_identity(), sort_keys=True))
     return sha256_bytes("\n".join(parts).encode())
 
 

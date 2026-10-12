@@ -3,18 +3,19 @@
 The Copilot adapter runs `/review-all` with ten namespaced custom reviewer
 profiles, an independent `review-all-verifier`, and a read-only follow-up
 `review-all-deep-dive` profile. It does not replace the
-methodology with Copilot's built-in code-review agent. Claude Code's skill,
-installation, scripts and evaluation runner remain unchanged.
+methodology with Copilot's built-in code-review agent. Both harnesses share the
+Python CLI, native process runner and ownership-aware installation.
 
 ## Install and remove
 
-Prerequisites: **Copilot CLI >=1.0.95**, authenticated; Python >=3.9; Git; Bash
->=4. The deterministic suite runs on macOS and Linux. The shell discovery
-scripts require a newer Bash than macOS's system Bash 3.2 (for example Homebrew
-Bash on PATH). Native Windows/PowerShell is not supported; use WSL.
-The checkout's installation recipes also require [just](https://just.systems/).
+Prerequisites: **Copilot CLI >=1.0.95**, authenticated; Python >=3.11; uv; Git.
+Just >=1.33 is optional for named tasks. Run `just setup` before installation.
+See the [shared CLI contract](../skills/review-all/references/cli.md) for
+direct uv commands, tested versions, shell/capability handling and platform
+limitations. Windows 11 and live default-model gate evidence remain pending;
+the historical macOS smoke below is not evidence of those results.
 
-```sh
+```text
 # From this package checkout:
 just install-copilot                   # ~/.copilot/skills/review-all and ~/.copilot/agents
 just install-copilot-project /absolute/path/to/reviewed/repository
@@ -163,9 +164,8 @@ required-model dispatch on that version; validate on the installed CLI.
 
 Profile defaults can also be generated with a chosen configuration:
 
-```sh
-python3 skills/review-all/scripts/copilot-install.py install \
-  --project /path/to/repo --config /path/to/models.json
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" install --harness copilot   --project /path/to/repo --config /path/to/models.json
 ```
 
 ## Explicit context and instruction boundaries
@@ -258,8 +258,8 @@ must be marked failed and retried, not treated as completed.
 
 After the user selects a difficult finding for investigation, resolve its settings:
 
-```sh
-python3 SKILL_ROOT/scripts/copilot-package.py model-settings --repo /path/to/repo --role deep-dive
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" copilot-package model-settings --role deep-dive
 ```
 
 Dispatch `review-all-deep-dive` through the native task tool with the returned
@@ -273,14 +273,13 @@ Ordinary explanations and test suggestions stay with the Sol coordinator.
 
 Install the skill first. Then:
 
-```sh
-python3 ~/.copilot/skills/review-all/scripts/copilot-gate.py \
-  --repo /path/to/repo --allow-tools --model gpt-6.1-sol --reasoning-effort high \
-  --severity important -- --staged
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" copilot-gate --allow-tools --model gpt-6.1-sol --reasoning-effort high --severity important -- --staged
 ```
 
-For project installation, substitute
-`/path/to/repo/.github/skills/review-all/scripts/copilot-gate.py`.
+For project installation, TOOL is `/path/to/repo/.github/.review-all-tool`.
+For user installation, TOOL is `~/.copilot/.review-all-tool` (expand the home
+directory to an absolute path).
 `--allow-tools` explicitly authorizes the coordinator's tools/checks on trusted
 code; it does not grant all filesystem paths or all URLs. Review your host's
 permission policy. Pass `--no-custom-instructions` to disable native and
@@ -304,20 +303,19 @@ narrowed, the coordinator reviews the complete resolved target.
 
 ## Tests and compatibility evidence
 
-```sh
-bash tests/run.sh
+```text
+just test
 
 # Real task-tool child dispatches, not merely copilot --agent:
-REVIEW_ALL_COPILOT_INTEGRATION=1 python3 tests/copilot_integration.py \
-  --out /absolute/path/to/evidence
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" integration    --out /absolute/path/to/evidence
 
 # Existing synthetic cases + independent Copilot rubric grader:
-REVIEW_ALL_COPILOT_EVALS=1 \
-  python3 skills/review-all/scripts/run-evals-copilot.py 01 \
-  --model gpt-6.1-sol --reasoning-effort high --out /absolute/path/to/eval-evidence
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" run-evals-copilot 01    --model gpt-6.1-sol --reasoning-effort high --out /absolute/path/to/eval-evidence
 ```
 
-Both model-backed runners are opt-in and retain evidence. The integration
+Both model-backed runners are opt-in and retain evidence. Set
+`REVIEW_ALL_COPILOT_INTEGRATION=1` or `REVIEW_ALL_COPILOT_EVALS=1` respectively
+in the host environment before invoking them. The integration
 fixture depends on root and path-specific instructions, a requirement provided
 only in the parent prompt, a real failed check, verifier source rereads, and
 missing-context rejection. It inspects actual task-tool calls. The eval runner

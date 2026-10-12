@@ -127,13 +127,13 @@ Each one-shot migration is identified by a string id stored in the top-level `mi
 ## Code hash computation
 
 **Do not compute this by hand.** One implementation lives in `scripts/code-hash.py`, for the same
-reason the profile cache key lives only in `discover.sh`: a hash that two producers derive
+reason the profile cache key lives only in `discover`: a hash that two producers derive
 independently is a hash that silently stops matching, and every `wontfix` suppression, reused
 verdict and `rejected` machine-dismissal in this file is decided by that comparison.
 
-```bash
-python3 scripts/code-hash.py anchored "$REPO_ROOT" "src/users/UserService.ts:42"
-python3 scripts/code-hash.py anchorless "<file_line>" "<severity>" "<root_cause_key>"
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" code-hash anchored "<repo>" "src/users/UserService.ts:42"
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" code-hash anchorless "<file_line>" "<severity>" "<root_cause_key>"
 ```
 
 For each finding with a concrete `file:line`, `code_hash = sha256(<3 lines before>\n<flagged line>\n<3 lines after>)`, joined with `\n`, 1-based lines clamped to the file. The ±3 context lines make the hash robust to whitespace-only edits elsewhere in the file while still detecting real code changes at the flagged location. A missing or unreadable file hashes the empty string, so a deletion never matches a hash taken while the file existed — the entry reopens rather than silently staying suppressed.

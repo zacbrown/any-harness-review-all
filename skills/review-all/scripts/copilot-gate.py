@@ -10,13 +10,15 @@ import uuid
 
 from copilot_common import REASONING_EFFORTS, RUNTIME, SCHEMA, cli_version, load_module, model_for, now
 from copilot_common import read_json, reasoning_for
+from portable import run as process_run
 
 PACKAGE = load_module("copilot-package")
 RESULTS = load_module("copilot-results")
 
 
 def launch(command, timeout):
-    return subprocess.run(command, timeout=timeout)
+    return process_run(command, cwd=command[command.index("-C") + 1], timeout=timeout,
+                       stdout=sys.stderr)
 
 
 def validate_verdict(directory, run_id, started, target, severity=None):
@@ -74,7 +76,7 @@ def main():
             f"Requested runId: {run_id}. Record scope.requestedTarget exactly as {json.dumps(target)}. "
             f"Record instruction mode {instruction_mode}; inspect actual disabled-source settings. "
             "Use named custom subagents, not top-level --agent or the built-in code-review agent. "
-            "Run the full workflow and finalize with copilot-results.py. Do not persist lifecycle state; "
+            "Run the full workflow and finalize with the installed uv review-all copilot-results CLI. Do not persist lifecycle state; "
             "the wrapper does that after validation. No menus, no questions, "
             "no edits to reviewed source and no publication. Never manually fabricate a verdict."
         )

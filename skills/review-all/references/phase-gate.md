@@ -16,13 +16,9 @@ Normal `/review-all` is interactive by design — Phase 4's menu is a *mandatory
    `{ "id", "severity", "file", "line", "root_cause_key", "title", "confidence" }`
    (this is exactly what `scripts/export-findings.py` `normalize()` accepts, and what `gate-verdict.py` consumes).
 4. **Determine partial coverage.** If Phase 2.75 surfaced a `⚠️ PARTIAL REVIEW` (an agent or verifier never returned cleanly after its one retry), the review could not fully run. Pass `--partial` so the verdict **fails closed** — "couldn't verify" is treated as "not done", never as a green gate.
-5. **Emit the verdict.** Pipe the assembled findings array to:
-   ```bash
-   echo "$KEPT_FINDINGS_JSON" | python3 scripts/gate-verdict.py \
-     --severity "${gateSeverityFloor:-critical}" \
-     --out "${gateVerdictFile:-.claude/review-all/gate-verdict.json}" \
-     --reviewed-sha "$HEAD_SHA" \
-     ${PARTIAL:+--partial}
+5. **Emit the verdict.** Write the assembled findings array to a JSON input file and invoke the CLI (append `--partial` when coverage is incomplete; substitute the configured severity/output path):
+   ```text
+   uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" --input "<kept-findings.json>" gate-verdict --severity critical --out ".claude/review-all/gate-verdict.json" --reviewed-sha "<HEAD>"
    ```
    The script writes `gate-verdict.json`, prints the same JSON to stdout, and **exits 0 (pass) or 1 (blocked) or 2 (malformed)**. A finding blocks when its severity rank ≥ the floor's (`critical` → 🔴 only; `important` → 🔴+🟠; …).
 6. **Terminate.** Print one human-readable summary line, then stop the turn:

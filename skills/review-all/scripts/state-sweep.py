@@ -37,6 +37,7 @@ state-file.md step 3); this script owns the sweep (step 4).
 """
 
 import json
+import argparse
 import os
 import sys
 import tempfile
@@ -61,7 +62,7 @@ def write_atomic(path, obj):
     os.makedirs(d, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=".state.", dir=d)
     try:
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(obj, f, indent=2)
         os.replace(tmp, path)
     except Exception:
@@ -69,13 +70,16 @@ def write_atomic(path, obj):
         raise
 
 def main():
-    if len(sys.argv) != 4:
-        print(f"usage: {sys.argv[0]} STATE_FILE HEAD_SHA SEEN_KEYS_JSON", file=sys.stderr)
-        sys.exit(2)
-    state_path, head_sha, seen_path = sys.argv[1:]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("state_path")
+    parser.add_argument("head_sha")
+    parser.add_argument("seen_path")
+    parser.add_argument("--changed-keys", default=os.environ.get("STATE_SWEEP_CHANGED_KEYS"))
+    args = parser.parse_args()
+    state_path, head_sha, seen_path = args.state_path, args.head_sha, args.seen_path
 
     if os.path.exists(state_path):
-        with open(state_path) as f:
+        with open(state_path, encoding="utf-8") as f:
             state = json.load(f)
     else:
         state = {"version": 1, "migrations": [], "findings": {}}
@@ -83,13 +87,13 @@ def main():
     state.setdefault("findings", {})
     state.setdefault("migrations", [])
 
-    with open(seen_path) as f:
+    with open(seen_path, encoding="utf-8") as f:
         seen_keys = set(json.load(f))
 
-    changed_path = os.environ.get("STATE_SWEEP_CHANGED_KEYS")
+    changed_path = args.changed_keys
     changed_keys = set()
     if changed_path and os.path.exists(changed_path):
-        with open(changed_path) as f:
+        with open(changed_path, encoding="utf-8") as f:
             changed_keys = set(json.load(f))
 
     now = datetime.now(tz=timezone.utc)

@@ -39,12 +39,14 @@ All agents also receive: changed file list, Project Profile, CLAUDE.md rules, Ph
 
 ## Per-agent diff ordering
 
+The CLI `agent-order` operation delegates to the canonical `scripts/agent-order.py` algorithm.
+
 Every agent sees the same diff content, but **each sees the files in a different order**. Attention is not uniform across a long prompt, so ten agents handed an identically ordered diff share the same weak middle; permuting per agent decorrelates that blind spot at zero token cost. (Same lever as the randomized-order passes Cursor's Bugbot reports, and the multi-pass aggregation gain measured in SWR-Bench — here it comes free, because ten passes already run.)
 
 Before spawning, call the ordering script **once** with the union of changed files:
 
-```bash
-echo "$CHANGED_FILES_JSON" | python3 scripts/agent-order.py --agents 10
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" --input "<input.json>" agent-order --agents 10
 ```
 
 It returns a permutation per agent number, derived from `sha256("<agent>:<path>")` — reproducible across runs and machines, so a review stays replayable. Assemble each agent's `<diff>` by concatenating its per-file diff slices in that agent's order.
@@ -98,16 +100,15 @@ Verifiers are out of scope for this table — they already spawn with an explici
 
 An interrupted review must not re-pay for the axes that already finished. Each completed axis is persisted to `<checkpointDir>/<axis>.json` (default `.claude/review-all/checkpoints/`) and reused on a later run **only** when that run is provably the same review.
 
-```bash
+```text
 # before spawning — returns runKey + the axes already done.
 # Pipe the RESOLVED, FILTERED diff (post --paths/--exclude, post scope prompt):
 # it must be the exact bytes the agents will review, or a narrowed re-run
 # resumes findings from a wider diff.
-git diff <resolved range> -- <filtered file list> | python3 scripts/checkpoint.py load --head "$(git rev-parse HEAD)" --dir <checkpointDir>
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" --input "<filtered.diff>" checkpoint load --head "<HEAD>" --dir <checkpointDir>
 
 # as each agent returns
-echo "$AGENT_FINDINGS_JSON" | python3 scripts/checkpoint.py save \
-  --run-key "<runKey>" --axis "<agent id>" --head "$HEAD_SHA" --dir <checkpointDir>
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" --input "<input.json>" checkpoint save    --run-key "<runKey>" --axis "<agent id>" --head "<HEAD>" --dir <checkpointDir>
 ```
 
 Rules:
@@ -117,7 +118,7 @@ Rules:
 3. **Saved pre-dedupe, pre-verification.** The store holds the agent's own return. It is independent of `state.json`, which tracks finding lifecycle *across different diffs*; conflating them would let a verified-away finding resurrect, or a diff change go unnoticed.
 4. **Resumed counts as returned** in the Phase 2.75 completion gate, and the Phase 3 report names the resumed axes (`references/phase-3-report.md` → *Agents run*) — a reader must never mistake reused findings for a fresh pass.
 5. **Stale files are deleted, not kept.** `load` removes every checkpoint whose key, schema, or filename does not match, so the directory holds at most one file per axis for the current key. Force a full re-run by deleting the directory.
-6. **Optional, never load-bearing.** No `python3` (Phase 0.0 `available`) → no checkpointing; spawn every axis as before.
+6. **Optional, never load-bearing.** No matching checkpoint → spawn the axis normally. An incomplete installation is an error.
 
 ## Chunking large slices
 
