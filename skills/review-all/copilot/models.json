@@ -1,5 +1,15 @@
 {
   "default": "gpt-6.1-sol",
   "reasoningEffort": "high",
-  "roles": {}
+  "roles": {
+    "01-standards": "gpt-6-luna",
+    "03-dry-smells": "gpt-6-luna",
+    "verifier": "claude-opus-5.5",
+    "judge": "claude-opus-5.5",
+    "deep-dive": "gpt-6-astra"
+  },
+  "reasoningEfforts": {
+    "01-standards": "medium",
+    "03-dry-smells": "medium"
+  }
 }

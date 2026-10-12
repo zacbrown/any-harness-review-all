@@ -226,7 +226,7 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
     baseline = tree_hashes(repo)
     config_path = repo / ".copilot/review-all.json"
     config = read_json(config_path) if config_path.exists() else {}
-    reasoning_effort = reasoning_for(config)
+    reasoning_for(config)  # Validate shared and per-role settings before dispatch.
     for key in ("chunkMaxBytes", "chunkMaxFiles", "maxFileDiffBytes", "quotaDebt", "quotaSuggested", "quotaQuestion"):
         if key in config and (type(config[key]) is not int or config[key] < 0):
             raise ValueError(f"{key} must be a nonnegative integer")
@@ -373,7 +373,7 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
             assignments[assignment_id] = {
                 "schemaVersion": SCHEMA, "id": assignment_id, "kind": "reviewer", "axis": axis,
                 "agent": agent_id(axis), "model": model_for(axis, config),
-                "reasoningEffort": reasoning_effort,
+                "reasoningEffort": reasoning_for(config, axis),
                 "chunks": [chunk_id], "files": names,
                 "diffParts": [{k: v for k, v in m.items() if k != "data"} for m in members],
                 "mandatory": list(dict.fromkeys(mandatory)), "sources": {n: sources[n] for n in names + request.get("supportingFiles", [])},
@@ -461,10 +461,18 @@ def main():
     prep.add_argument("--copilot", default="copilot")
     check = sub.add_parser("fresh")
     check.add_argument("directory")
+    settings = sub.add_parser("model-settings", help="resolve follow-up/coordinator model settings")
+    settings.add_argument("--repo", default=".", type=Path)
+    settings.add_argument("--role", required=True, choices=AXES.AGENT_IDS + ["coordinator", "verifier", "judge", "deep-dive"])
     args = parser.parse_args()
     try:
         if args.action == "prepare":
             print(prepare(args.repo, args.request, binary=args.copilot))
+        elif args.action == "model-settings":
+            path = args.repo.resolve() / ".copilot/review-all.json"
+            config = read_json(path) if path.exists() else {}
+            print(json.dumps({"role": args.role, "model": model_for(args.role, config),
+                              "reasoning_effort": reasoning_for(config, args.role)}))
         else:
             manifest = fresh(args.directory)
             print(json.dumps({"runId": manifest["runId"], "fresh": True}))

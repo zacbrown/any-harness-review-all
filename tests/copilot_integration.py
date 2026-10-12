@@ -14,7 +14,7 @@ import tempfile
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "skills/review-all/scripts"
 sys.path.insert(0, str(SCRIPTS))
-from copilot_common import REASONING_EFFORTS, atomic, cli_version, load_module, models, read_json  # noqa: E402
+from copilot_common import REASONING_EFFORTS, atomic, cli_version, load_module, model_for, read_json, reasoning_for  # noqa: E402
 
 INSTALL = load_module("copilot-install")
 PACKAGE = load_module("copilot-package")
@@ -47,6 +47,30 @@ def child_calls(stream):
         if event.get("type") == "assistant.message":
             calls.extend(t for t in event.get("data", {}).get("toolRequests", []) if t.get("name") == "task")
     return calls
+
+
+def runtime_model_errors(stream, expected_models):
+    # Correlate runtime agent IDs with result-envelope roles, then check every
+    # exposed identity, including messages emitted before the final result.
+    # effectiveModel inside child-authored JSON is not runtime provenance.
+    roles = {}
+    for event in stream:
+        data = event.get("data", {})
+        if event.get("agentId") and event.get("type") == "assistant.message" and data.get("content"):
+            try:
+                result = json.loads(data["content"])
+            except ValueError:
+                continue
+            if isinstance(result, dict) and result.get("axis") in expected_models:
+                roles[event["agentId"]] = result["axis"]
+    errors = []
+    for event in stream:
+        axis = roles.get(event.get("agentId"))
+        model = event.get("data", {}).get("model")
+        if axis and model and model != expected_models[axis]:
+            errors.append(f"{axis} effective model {model!r} differs from requested {expected_models[axis]!r} "
+                          f"(agent {event['agentId']})")
+    return errors
 
 
 def source_read_errors(stream, ledger, plan):
@@ -91,9 +115,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True, help="persistent evidence directory")
     parser.add_argument("--copilot", default="copilot")
-    defaults = models()
-    parser.add_argument("--model", default=defaults["default"])
-    parser.add_argument("--reasoning-effort", choices=REASONING_EFFORTS, default=defaults["reasoningEffort"])
+    parser.add_argument("--model", default=model_for("coordinator", {}), help="parent coordinator model")
+    parser.add_argument("--reasoning-effort", choices=REASONING_EFFORTS, default=reasoning_for({}))
+    parser.add_argument("--reviewer-model", default=model_for("01-standards", {}))
+    parser.add_argument("--reviewer-reasoning-effort", choices=REASONING_EFFORTS,
+                        default=reasoning_for({}, "01-standards"))
+    parser.add_argument("--verifier-model", default=model_for("verifier", {}))
+    parser.add_argument("--verifier-reasoning-effort", choices=REASONING_EFFORTS,
+                        default=reasoning_for({}, "verifier"))
     parser.add_argument("--timeout", type=int, default=600)
     args = parser.parse_args()
     if os.environ.get("REVIEW_ALL_COPILOT_INTEGRATION") != "1":
@@ -108,8 +137,10 @@ def main():
     git(repo, "init", "-q")
     git(repo, "config", "user.name", "review-all integration")
     git(repo, "config", "user.email", "integration@example.invalid")
-    INSTALL.install(repo / ".github", {"models": {"01-standards": args.model},
-                                     "verifierModel": args.model, "reasoningEffort": args.reasoning_effort})
+    config = {"models": {"01-standards": args.reviewer_model}, "verifierModel": args.verifier_model,
+              "reasoningEfforts": {"01-standards": args.reviewer_reasoning_effort,
+                                   "verifier": args.verifier_reasoning_effort}}
+    INSTALL.install(repo / ".github", config)
     write(repo, "AGENTS.md", "Repository contract: every public CONFIG dictionary must contain audit_tag. "
           "Report a newly missing audit_tag as IMPORTANT with static proof.\n")
     write(repo, ".github/instructions/scoped.instructions.md",
@@ -125,8 +156,7 @@ def main():
     write(repo, "billing/config.py", "CONFIG = {'retention_days': 7, 'factor': 9}\n")
     write(repo, "public/config.py", "CONFIG = {'audit_tag': 'updated'}\n")
     skip = [a for a in PACKAGE.AXES.AGENT_IDS if a != "01-standards"]
-    write(repo, ".copilot/review-all.json", json.dumps({"skipAgents": skip, "models": {"01-standards": args.model},
-                                                     "verifierModel": args.model, "reasoningEffort": args.reasoning_effort}))
+    write(repo, ".copilot/review-all.json", json.dumps({**config, "skipAgents": skip}))
     runtime = repo / ".copilot/review-all"
     runtime.mkdir(parents=True, exist_ok=True)
     write(repo, ".copilot/review-all/.gitignore", "*\n")
@@ -153,8 +183,8 @@ def main():
         f"Run python3 {SCRIPTS / 'copilot-package.py'} prepare --repo {repo} --request {runtime / 'request.json'}. "
         "Do not use a top-level --agent process. Use the task tool with the explicitly named custom agent. "
         f"Run python3 {SCRIPTS / 'copilot-results.py'} start {directory} --assignment {first_id}. "
-        f"Dispatch agent_type review-all-standards with model {args.model}, "
-        f"reasoning_effort {args.reasoning_effort}, and the returned prompt. "
+        f"Dispatch agent_type review-all-standards with model {args.reviewer_model}, "
+        f"reasoning_effort {args.reviewer_reasoning_effort}, and the returned prompt. "
         "Write the child's exact JSON response, unmodified, "
         f"to {directory / 'reviewer-result.json'}. "
         f"Then invoke python3 {SCRIPTS / 'copilot-results.py'} accept {directory} "
@@ -162,8 +192,8 @@ def main():
         "If malformed, use start and retry once with the exact same inputs and save the raw retry. "
         f"Invoke python3 {SCRIPTS / 'copilot-results.py'} verifiers {directory}. "
         "Read the resulting verification.json, start every verifier assignment with copilot-results.py start, "
-        f"and dispatch agent_type review-all-verifier with model {args.model}, "
-        f"reasoning_effort {args.reasoning_effort}, and that start prompt in a fresh context. "
+        f"and dispatch agent_type review-all-verifier with model {args.verifier_model}, "
+        f"reasoning_effort {args.verifier_reasoning_effort}, and that start prompt in a fresh context. "
         "Do not pass another child's exploration or judgments. Save each exact child JSON to verifier-result.json "
         "in the run directory and accept it through copilot-results.py (retry once if required). "
         "Stop after the reviewer and verifier results have been accepted. Do not finalize or persist lifecycle state. "
@@ -186,6 +216,8 @@ def main():
     if proc.returncode:
         errors.append(f"CLI exited {proc.returncode}")
     stream = events(transcript)
+    expected_models = {"01-standards": args.reviewer_model, "verifier": args.verifier_model}
+    errors.extend(runtime_model_errors(stream, expected_models))
     # A separate parent turn prevents the production skill's completion/menu
     # behavior from swallowing this deliberately broken, out-of-band probe.
     try:
@@ -195,8 +227,8 @@ def main():
         atomic(runtime / "missing-assignment.json", broken)
         missing_prompt = (
             "This is one isolated custom-subagent protocol probe, NOT a full review workflow. "
-            f"Use task exactly once with agent_type review-all-standards, model {args.model}, "
-            f"reasoning_effort {args.reasoning_effort}, mode sync. "
+            f"Use task exactly once with agent_type review-all-standards, model {args.reviewer_model}, "
+            f"reasoning_effort {args.reviewer_reasoning_effort}, mode sync. "
             f"Child prompt: Read {runtime / 'missing-assignment.json'} and EVERY mandatory input. Attempt 1. "
             "Return ONLY the result-contract JSON object. A mandatory file is intentionally missing: "
             "report status incomplete and missingInputs, not no findings. Do not create missing files. "
@@ -210,6 +242,7 @@ def main():
         if missing_proc.returncode:
             errors.append(f"missing-context parent exited {missing_proc.returncode}")
         missing_stream = events(out / "missing-transcript.jsonl")
+        errors.extend(runtime_model_errors(missing_stream, expected_models))
         stream += missing_stream
         for event in missing_stream:
             if event.get("agentId") and event.get("type") == "assistant.message" and event.get("data", {}).get("content"):
@@ -221,9 +254,12 @@ def main():
     calls = child_calls(stream)
     for call in calls:
         arguments = call.get("arguments", {})
-        if arguments.get("agent_type", "").startswith("review-all-") and (
-                arguments.get("model") != args.model or arguments.get("reasoning_effort") != args.reasoning_effort):
-            errors.append("custom subagent dispatch did not use the requested model and reasoning effort")
+        expected = {"review-all-standards": (args.reviewer_model, args.reviewer_reasoning_effort),
+                    "review-all-verifier": (args.verifier_model, args.verifier_reasoning_effort)}
+        agent = arguments.get("agent_type", "")
+        if agent.startswith("review-all-") and (
+                agent not in expected or (arguments.get("model"), arguments.get("reasoning_effort")) != expected[agent]):
+            errors.append("custom subagent dispatch did not use its role's requested model and reasoning effort")
     call_text = json.dumps(calls)
     for name in ("review-all-standards", "review-all-verifier"):
         if name not in call_text:
@@ -250,8 +286,10 @@ def main():
         identities = []
         for event in stream:
             data = event.get("data", {})
-            if event.get("agentId") and event.get("type") == "assistant.message" and data.get("content"):
+            if event.get("agentId") and event.get("type") == "assistant.message":
                 identities.append({"agentId": event["agentId"], "model": data.get("model"), "provider": data.get("providerId")})
+                if not data.get("content"):
+                    continue
                 try:
                     child_results.append(json.loads(data["content"]))
                 except ValueError:
@@ -267,7 +305,7 @@ def main():
     except (OSError, ValueError, KeyError, TypeError) as error:
         errors.append(str(error))
     outcome = {"passed": not errors, "cliVersion": version, "model": args.model,
-               "reasoningEffort": args.reasoning_effort, "errors": errors,
+               "reasoningEffort": args.reasoning_effort, "reviewConfig": config, "errors": errors,
                "repo": str(repo), "run": str(directory), "taskCalls": len(calls),
                "runtimeIdentities": identities if "identities" in locals() else [],
                "tests": ["root instructions", "path-specific instructions", "parent-only requirement",

@@ -27,25 +27,30 @@ def assemble(config=None):
     shared = adapt(body((SKILL / "agents/_shared.md").read_text()))
     shared_gate = "## 3-question gate\n" + shared.split("## 3-question gate\n", 1)[1].split("\n## ", 1)[0]
     protocol = (SKILL / "copilot/dispatch.md").read_text()
-    axes = load_module("select-agents").AGENT_IDS + ["verifier"]
+    axes = load_module("select-agents").AGENT_IDS + ["verifier", "deep-dive"]
     for axis in axes:
-        persona = persona_text(axis)
+        persona = ((SKILL / "copilot/deep-dive.md").read_text() if axis == "deep-dive" else persona_text(axis))
         tools = ["read", "search"]
         if axis == "04-consistency-history":
             tools.append("execute")
         header = {
             "name": agent_id(axis),
-            "description": f"review-all {axis}: independent, evidence-based review; requires a dispatch package",
+            "description": ("Read-only investigation of a selected review finding" if axis == "deep-dive" else
+                            f"review-all {axis}: independent, evidence-based review; requires a dispatch package"),
+            "infer": axis != "deep-dive",
             "tools": tools,
             "model": model_for(axis, config),
-            "reasoning-effort": reasoning_for(config),
+            "modelPolicy": "required",
+            "reasoningEffort": reasoning_for(config, axis),
             "include-custom-instructions": True,
         }
         frontmatter = "\n".join(f"{k}: {json.dumps(v)}" for k, v in header.items())
-        text = (f"---\n{frontmatter}\n---\n\n{protocol}\n\n{persona}\n\n{shared_gate}\n\n"
-                "Read the assignment's mandatory shared-rules component in full. "
-                "It contains the canonical severity, quotas, claim classes, dismissal, "
-                "evidence, and exploration rules, resolved for this run.\n")
+        role_protocol = "" if axis == "deep-dive" else protocol
+        reviewer_guidance = "" if axis == "deep-dive" else (
+            f"{shared_gate}\n\nRead the supplied shared-rules component in full. "
+            "It contains the canonical severity, quotas, claim classes, dismissal, "
+            "evidence, and exploration rules, resolved for this run.\n")
+        text = f"---\n{frontmatter}\n---\n\n{role_protocol}\n\n{persona}\n\n{reviewer_guidance}"
         text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
         if len(body(text)) > 30000:
             raise ValueError(f"{axis} exceeds Copilot's 30,000-character profile limit")
