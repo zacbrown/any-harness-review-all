@@ -12,6 +12,7 @@ import uuid
 from copilot_common import RUNTIME, SCHEMA, SKILL, adapt, agent_id, atomic, body, cli_version
 from copilot_common import digest, encoded, file_hash, git, load_module, model_for, now, read_json
 from copilot_common import persona_text, reasoning_for, resource_hashes, run, safe_path, state_path
+from copilot_common import write_assignment
 from copilot_instructions import collect
 from portable import environment_identity, execute
 
@@ -19,6 +20,68 @@ SELECT = load_module("select-files")
 AXES = load_module("select-agents")
 ORDER = load_module("agent-order")
 PART_BYTES = 12000
+
+
+def load_config(repo):
+    path = Path(repo) / ".copilot/review-all.json"
+    config = read_json(path) if path.exists() else {}
+    reasoning_for(config)
+    for key in ("chunkMaxBytes", "chunkMaxFiles", "maxFileDiffBytes", "quotaDebt", "quotaSuggested", "quotaQuestion"):
+        if key in config and (type(config[key]) is not int or config[key] < 0):
+            raise ValueError(f"{key} must be a nonnegative integer")
+    for key in ("maxConcurrentAgents", "verifierVotes"):
+        if key in config and (type(config[key]) is not int or config[key] < 1):
+            raise ValueError(f"{key} must be a positive integer")
+    return config
+
+
+def plan(repo, request_path):
+    """Preview dispatch cost without running checks or creating a run."""
+    repo = Path(repo).resolve()
+    request = read_json(request_path)
+    if request.get("schemaVersion") != SCHEMA:
+        raise ValueError("unsupported request schemaVersion")
+    config = load_config(repo)
+    args, revision = diff_args(repo, dict(request["target"]))
+    records = target_records(repo, args)
+    selection, decisions = select(records, request["scope"], config)
+    validate_supporting_files(records, request.get("supportingFiles", []))
+    names = {r["path"] for r in selection["reviewable"]}
+    selected = [r for r in records if r["path"] in names]
+    groups = chunks(selected, config)
+    sizes = {}
+    for record in selected:
+        source_revision = revision
+        if record["status"] == "D":
+            source_revision = ("index" if request["target"]["kind"] == "unstaged" else
+                               args[0] if request["target"]["kind"] in {"range", "pr"} else "HEAD")
+        sizes[record["path"]] = len(source_bytes(repo, source_revision, record["path"]))
+    supporting = {name: len(source_bytes(repo, revision, name)) for name in request.get("supportingFiles", [])}
+    counts, total_bytes = {}, 0
+    for axis, decision in decisions["agents"].items():
+        counts[axis] = 0
+        if not decision["spawn"]:
+            continue
+        for group in groups:
+            members = [p for p in group if p["path"] in decision["files"]]
+            if members:
+                counts[axis] += 1
+                source_sizes = {n: sizes[n] for n in {p["path"] for p in members}}
+                source_sizes.update(supporting)
+                total_bytes += sum(len(p["data"]) for p in members) + sum(source_sizes.values())
+    count = sum(counts.values())
+    # A planning heuristic, not a tokenizer or a billing promise. Repeated source
+    # across axes/chunks counts repeatedly because each fresh child reads it.
+    estimate = (total_bytes + 3) // 4 + count * 8000
+    return {"reviewerAssignments": count, "assignmentsByAxis": counts,
+            "reviewableFiles": len(selected), "selectionCounts": selection["counts"],
+            "skippedAxes": {a: d["reason"] for a, d in decisions["agents"].items() if not d["spawn"]},
+            "maxConcurrentAgents": config.get("maxConcurrentAgents", 1),
+            "estimatedReviewerInputTokens": estimate,
+            "estimateBasis": "source+diff bytes/4, plus 8000 context tokens per dispatch; approximate, not a quote",
+            "additionalCosts": "check output, large instructions/supporting context, output/reasoning tokens, retries and verifiers vary",
+            "verifierDispatches": {"min": 0, "max": sum(v > 0 for v in counts.values()) * config.get("verifierVotes", 1)},
+            "chunkNumbering": "global canonical diff chunks; gaps within an axis are intentional"}
 
 
 def tree_hashes(repo):
@@ -159,6 +222,15 @@ def source_bytes(repo, revision, name):
     return git(repo, "show", (":" if revision == "index" else revision + ":") + name)
 
 
+def validate_supporting_files(records, names):
+    secret_rules = SELECT.compile_rule_list(SELECT.load_classes(SELECT.DEFAULT_CLASSES_PATH)["secret"])
+    renamed_secrets = {r["path"] for r in records if r.get("oldPath")
+                       and SELECT.first_match(secret_rules, r["oldPath"])}
+    for name in names:
+        if name in renamed_secrets or SELECT.first_match(secret_rules, name):
+            raise ValueError(f"supporting context matches secret exclusion: {name}")
+
+
 def checks(repo, specs, writer, target_matches=True):
     results = []
     required = {"Typecheck", "Lint", "Tests", "Spec Existence", "Dependencies"}
@@ -217,20 +289,16 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
     head = git(repo, "rev-parse", "HEAD").decode().strip()
     baseline = tree_hashes(repo)
     config_path = repo / ".copilot/review-all.json"
-    config = read_json(config_path) if config_path.exists() else {}
-    reasoning_for(config)  # Validate shared and per-role settings before dispatch.
-    for key in ("chunkMaxBytes", "chunkMaxFiles", "maxFileDiffBytes", "quotaDebt", "quotaSuggested", "quotaQuestion"):
-        if key in config and (type(config[key]) is not int or config[key] < 0):
-            raise ValueError(f"{key} must be a nonnegative integer")
+    config = load_config(repo)
     for key in ("stateFile", "historyFile", "checkpointDir", "snoozeFile"):
         if key in config:
             state_path(repo, config[key])
-    if config.get("verifierVotes", 1) < 1:
-        raise ValueError("verifierVotes must be >= 1")
     watched = {str(request_path): file_hash(request_path), str(config_path): file_hash(config_path)}
     context = {}
     for key in ("requirements", "profile"):
         path = Path(request[key]).resolve()
+        if key == "profile" and not isinstance(read_json(path), dict):
+            raise ValueError("profile must be a JSON object (an empty object is valid)")
         watched[str(path)] = file_hash(path)
         context[key] = writer.store(key, path.read_bytes())
     target = dict(request["target"])
@@ -238,12 +306,7 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
     reviewed_head = revision if target["kind"] in {"range", "pr"} else head
     records = target_records(repo, args)
     selection, decisions = select(records, request["scope"], config)
-    secret_rules = SELECT.compile_rule_list(SELECT.load_classes(SELECT.DEFAULT_CLASSES_PATH)["secret"])
-    renamed_secret_paths = {r["path"] for r in records if r.get("oldPath")
-                            and SELECT.first_match(secret_rules, r["oldPath"])}
-    for name in request.get("supportingFiles", []):
-        if name in renamed_secret_paths or SELECT.first_match(secret_rules, name):
-            raise ValueError(f"supporting context matches secret exclusion: {name}")
+    validate_supporting_files(records, request.get("supportingFiles", []))
     paths = [r["path"] for r in selection["reviewable"]]
     selected = [r for r in records if r["path"] in paths]
     instruction_files = list(dict.fromkeys(paths + request.get("supportingFiles", [])))
@@ -394,7 +457,7 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
     manifest["packageHash"] = package_hash(manifest)
     for assignment in assignments.values():
         assignment.update({"runId": run_id, "packageHash": manifest["packageHash"]})
-        atomic(directory / "assignments" / (assignment["id"] + ".json"), assignment)
+        write_assignment(directory / "assignments" / (assignment["id"] + ".json"), assignment)
     atomic(directory / "manifest.json", manifest)
     return directory
 
@@ -409,6 +472,10 @@ def fresh(directory):
     if manifest["runtime"].get("environment") != environment_identity():
         raise ValueError("execution environment changed; prepare a fresh run")
     repo = Path(manifest["repo"])
+    config_path = str(repo / ".copilot/review-all.json")
+    if file_hash(config_path) != manifest["watched"].get(config_path):
+        raise ValueError("config was created, modified, or removed after prepare: " + config_path +
+                         "; abandon this run, then prepare a new run after finishing configuration")
     if git(repo, "rev-parse", "HEAD").decode().strip() != manifest["localHead"] or tree_hashes(repo) != manifest["treeHashes"]:
         raise ValueError("reviewed source/index inputs changed")
     if digest(git(repo, "ls-files", "--stage", "-z")) != manifest["indexHash"]:
@@ -454,6 +521,9 @@ def main():
     prep.add_argument("--repo", default=".")
     prep.add_argument("--request", required=True)
     prep.add_argument("--copilot", default="copilot")
+    preview = sub.add_parser("plan", help="estimate dispatches and input tokens without running checks")
+    preview.add_argument("--repo", default=".")
+    preview.add_argument("--request", required=True)
     check = sub.add_parser("fresh")
     check.add_argument("directory")
     settings = sub.add_parser("model-settings", help="resolve follow-up/coordinator model settings")
@@ -461,7 +531,9 @@ def main():
     settings.add_argument("--role", required=True, choices=AXES.AGENT_IDS + ["coordinator", "verifier", "judge", "deep-dive"])
     args = parser.parse_args()
     try:
-        if args.action == "prepare":
+        if args.action == "plan":
+            print(json.dumps(plan(args.repo, args.request), indent=2))
+        elif args.action == "prepare":
             print(prepare(args.repo, args.request, binary=args.copilot))
         elif args.action == "model-settings":
             path = args.repo.resolve() / ".copilot/review-all.json"

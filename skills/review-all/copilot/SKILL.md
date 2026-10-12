@@ -107,11 +107,32 @@ flatten module instructions into the project profile's global rules.
 
 ## Prepare the run
 
-Read `copilot/request-example.json` and `copilot/result-contract.md`. Write a
+Read `copilot/request-example.json`, `copilot/request-contract.md` (target kinds,
+range example and minimal profile), and `copilot/result-contract.md`. Write a
 request JSON, requirements text, and project profile JSON under the ignored
 `.copilot/review-all/` directory. Ensure that directory is ignored before
 recording any sensitive review evidence. The helper creates a local `*`
 ignore file inside it; do not stage runtime artifacts.
+Finish `.copilot/review-all.json` **before** preparing a run; creating even a
+previously absent config afterward invalidates it. For ad-hoc Python inspection,
+use TOOL's `.venv/bin/python` (Windows: `.venv/Scripts/python.exe`), not system
+Python, which may be 3.9.
+
+Before checks or dispatch, run the read-only cost preview:
+
+```text
+uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" copilot-package plan --request REQUEST
+```
+
+Show reviewer assignment count, counts by axis, estimated reviewer input tokens,
+possible verifier dispatches, and skipped axes in the preserved large-range
+prompt. The token estimate is a heuristic; reasoning/output, retries, check
+output and verifier costs vary. In headless mode record it without prompting.
+Do not lower chunk limits just to fit a single view call: assignment JSON has
+line ranges and components have 12KB parts. Smaller chunks multiply repeated
+source/context reads. For explicitly requested cheaper coverage, use the
+`skipAgents` examples in `copilot/request-contract.md`, show omitted axes and
+rerun the preview before prepare. Never silently sample files or drop axes.
 
 The request records resolved scope, instructions, requirements, target,
 supporting files and check argv. The coordinator chooses and authorizes these
@@ -140,7 +161,11 @@ runtime identity. Exclusions and skipped axes remain visible. The canonical
 select-files.py and select-agents.py decide activation, not model judgment.
 
 Inputs are split into numbered 12KB file parts, including long source/check
-output. No scope is truncated. Dispatches require reading all mandatory parts;
+output. Assignments are indented JSON, readable with small `view_range` windows
+through EOF when a full read truncates. Chunk IDs index the global canonical
+diff chunks; an axis can legitimately receive only chunk-0003. Gaps mean that
+earlier chunks contain no files for that axis, not missing coverage.
+No scope is truncated. Dispatches require reading all mandatory parts;
 if that cannot fit a context, lower chunk limits and rebuild, or report partial.
 Source snapshots are the original target source, not reviewer-provided snippets.
 Live files are supporting context only when they match the target; request more
@@ -148,7 +173,9 @@ Live files are supporting context only when they match the target; request more
 
 ## Native dispatch and one retry
 
-For EACH assignment from `RUN/manifest.json`, run:
+Start each assignment **immediately before dispatch**, not the whole manifest
+in advance. `start` reserves a slot and consumes an attempt. For EACH ready
+assignment from `RUN/manifest.json`, run:
 
 ```text
 uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" copilot-results start RUN --assignment ID
@@ -168,11 +195,28 @@ review-all-consistency-history, review-all-simplification,
 review-all-security-deep-dive, review-all-performance, review-all-test-quality,
 review-all-api-contract, review-all-a11y-i18n.
 
+For plugin installations add `--agent-namespace review-all` to **every** start
+command (including verifiers), yielding names such as
+`review-all:review-all-standards`. Manual user/project installations omit it.
+Use the returned dispatchable name verbatim; do not substitute a generic agent.
+
 Launch independent assignments concurrently only within the runtime's available
-capacity (and optional config `maxConcurrentAgents` cap); queue the rest.
-If capacity is unknown, use one at a time. A concurrency rejection is queued
-work, not a successful review. Do not repeatedly poll; use completion events.
-Persist the raw returned JSON as RESULT, then:
+capacity and config `maxConcurrentAgents` cap (default **1**); queue the rest.
+Use capacity exposed by the host/task tool; there is no portable discovery
+probe and eight observed slots in one session is not a universal limit. Set a
+larger cap before prepare only when capacity is known. The helper enforces the
+cap against running ledger jobs. If capacity is unknown, use one at a time.
+For a known-capacity wave, `start RUN --assignments ID1,ID2` validates freshness
+once, reserves the wave atomically, and emits one dispatch JSON per line.
+Dispatch that wave immediately, then wait for completion events before starting
+more. If the host rejects a launch, record it with `fail` and retry once when a
+slot is available; never count queued work as complete.
+
+Use the compact result contract to avoid re-emitting run metadata and 40–80
+mandatory paths. When the host can pipe an existing agent output stream/file,
+pass its JSON directly to `accept --stdin`; do not interpolate untrusted result
+text into shell commands. If the host only permits `create`/`edit` writes,
+save the small compact JSON unchanged as RESULT, then:
 
 ```text
 uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" copilot-results accept RUN --assignment ID --result RESULT
@@ -184,6 +228,12 @@ If the result says `retry: true`, start the same assignment once more with a
 fresh context and the validation error preamble. At most two attempts.
 Empty complete findings are valid. Missing files, malformed output, incomplete
 reads and lost chunks are not empty findings. Report their missing coverage.
+
+For stale or intentionally stopped runs, cancel live agents in the host and run
+`review-all copilot-results abandon RUN --reason "specific reason"`. This works
+even after config/source changes, closes unfinished ledger jobs, and preserves
+accepted evidence. Abandoned runs cannot restart or finalize; finish configuration
+and prepare a new run. Never reset attempt counters or edit completion.json.
 
 Persisted completion is for this run only. Do not load Claude checkpoints,
 profiles, verdicts or state. Cross-run reviewer/verification reuse is disabled
@@ -204,7 +254,8 @@ uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --
 This deduplicates accepted candidates with the canonical helper, applies global
 caps and human dismissal handling, and writes verifier assignments. Start and
 accept them with the same commands. Explicitly dispatch
-`agent_type: review-all-verifier` in a **fresh** context for every batch.
+the returned verifier agent (plugin: `review-all:review-all-verifier`) in a
+**fresh** context for every batch.
 Inputs contain only deduplicated claims, corroboration metadata, original
 source, scoped diff/rules, requirements, and checks -- no exploratory reasoning
 or other verifiers' judgments. Every verifier rereads cited original source.
@@ -248,7 +299,8 @@ coordinator inline. For an explicitly selected difficult-finding deep dive, run:
 uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --repo "<repo>" copilot-package model-settings --role deep-dive
 ```
 
-Dispatch `agent_type: review-all-deep-dive` with the returned `model` and
+Dispatch `agent_type: review-all:review-all-deep-dive` for plugins, or
+`review-all-deep-dive` for manual installs, with the returned `model` and
 `reasoning_effort`. Supply the selected finding/question, target/scope, enabled
 scoped instructions, user requirements, shared rules, original source snapshots,
 diff and check evidence. The child returns read-only analysis and fix strategies;

@@ -49,6 +49,11 @@ def atomic(path, value):
             os.unlink(tmp)
 
 
+def write_assignment(path, value):
+    """Keep assignments navigable with line-range read tools."""
+    atomic(path, (json.dumps(value, indent=2, ensure_ascii=True) + "\n").encode())
+
+
 def now():
     return datetime.now(timezone.utc).isoformat()
 
