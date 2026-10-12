@@ -217,7 +217,7 @@ Review-affecting canonical keys retain their meanings (see
 | `verifierModel` | Explicit verifier model ID; takes precedence over `models.verifier` |
 | `reasoningEffort` | Optional shared override for all roles, including roles with a different packaged default |
 | `reasoningEfforts` | Map of role IDs to efforts; overrides the shared setting for those roles |
-| `maxConcurrentAgents` | Coordinator's optional upper bound, also bounded by actual runtime capacity |
+| `maxConcurrentAgents` | Positive integer, default 1; enforced across running ledger jobs, also bounded by known host capacity |
 | Gate verdict | Authoritative verdict is per-run `runs/RUN_ID/gate-verdict.json`; legacy singleton `gateVerdictFile` is not a CI oracle |
 | Cache/checkpoint reuse | Cross-run reuse disabled; current-run completion receipts remain persistent |
 | `extraAgents` | Unknown/uninstalled custom axes fail explicitly rather than silently losing coverage |
@@ -293,7 +293,20 @@ uv run --project "<tool>" --locked --no-sync --no-python-downloads review-all --
 The coordinator records conversational requirements in a file, resolves the
 target and scope, discovers the project, and authorizes checks. The preparation
 helper collects filesystem/process evidence; it cannot infer what the user
-previously said. See `copilot/request-example.json` for the request contract.
+previously said. See the [request contract](../skills/review-all/copilot/request-contract.md)
+for all target kinds, a five-commit range example, a minimal profile, instruction
+settings confirmation, and explicit cheaper-axis configuration. The
+[staged request example](../skills/review-all/copilot/request-example.json) is a
+complete starting point. Finish config before preparing; adding a previously
+absent `.copilot/review-all.json` also invalidates a run.
+
+Preview cost before checks or dispatch with `copilot-package plan --repo REPO
+--request REQUEST` through the installed tool's uv CLI. It reports reviewer
+assignment counts by axis, approximate input tokens, verifier dispatch bounds
+and skipped axes. Include this in large-range prompts. The estimate is a
+planning heuristic, not a dollar quote; output/reasoning tokens, checks, retries
+and verification add variable cost. For ad-hoc inspection use `<tool>/.venv/bin/python`
+(Windows: `<tool>/.venv/Scripts/python.exe`), not a system Python 3.9.
 
 Every package has a schema version, unique run ID, exact filtered diff hash,
 target revisions, source hashes, selection decisions and chunk assignments,
@@ -306,6 +319,11 @@ Each dispatch includes essential task instructions and an exact assignment
 path. Every mandatory input is file-backed in numbered parts of at most 12KB.
 Large files and long lines are split without dropping bytes. File chunk
 membership is computed in canonical Git order before persona-specific ordering.
+Assignment JSON is pretty-printed; use small `view_range` windows through EOF
+if a full `view` truncates. Keep default chunk limits for display truncation:
+smaller chunks repeat common context and source, increasing dispatch/token cost.
+Chunk IDs are global canonical indices. An axis with only `chunk-0003` has no
+matching files in chunks 1 and 2; it has not lost coverage.
 Providing every part does not mean it fits every model context: lower chunk
 limits or report partial if a child cannot read everything. Never silently cut
 the review scope. Check output is preserved, not reduced to a claimed PASS.
@@ -334,6 +352,39 @@ coordinator must confirm the live policy and record disabled source paths.
 `--no-custom-instructions` disables explicit instruction transfer too, including
 REVIEW.md. Disabled files are not silently reintroduced as requirements.
 Unknown settings and unreadable enabled files mean incomplete context.
+
+## Dispatch and result transport
+
+Start immediately before dispatch, one assignment or one ready wave at a time.
+`copilot-results start RUN --assignments ID1,ID2` performs one freshness check,
+reserves the wave atomically, and emits one dispatch object per line. It refuses
+waves exceeding `maxConcurrentAgents` including already-running jobs. Configure
+known host capacity before prepare; there is no portable capacity probe, and an
+observed eight-agent session is not a general default.
+
+Plugin starts must add `--agent-namespace review-all`, so the returned name is
+dispatchable, e.g. `review-all:review-all-standards` or
+`review-all:review-all-verifier`. Manual installations omit this option. Use the
+returned name and settings verbatim.
+
+Reviewers return the [compact result contract](../skills/review-all/copilot/result-contract.md):
+a per-attempt dispatch token, status, explicit `allMandatoryRead` attestation,
+missing inputs, effective model, source files reread, and findings. The helper
+fills deterministic run/chunk/path metadata and stores the full validated result.
+Legacy full envelopes remain supported. The assignment itself must be read;
+its path is optional in legacy `readInputs`, while every `mandatory` component
+path is required. Neither form proves a model honestly read or applied the inputs.
+
+Use `copilot-results accept RUN --assignment ID --stdin` when the host can pipe
+an existing JSON output stream; otherwise use create/edit to save the compact
+object and `--result FILE`. Do not embed arbitrary agent JSON in shell code.
+Read-only agents still have no write tools, and the coordinator need not re-emit
+the mandatory path list or read back expanded result artifacts.
+
+On a stopped/stale run, cancel live agents in the host, then use
+`copilot-results abandon RUN --reason "config changed"`. It closes unfinished
+jobs without checking freshness, preserves completed evidence and forbids
+restarting/finalizing that run. Finish configuration and prepare a new run.
 
 Parent-only instruction directories do not automatically follow child
 dispatches. The coordinator records relevant, enabled sources as `parentSources`

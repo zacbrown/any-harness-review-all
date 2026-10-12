@@ -50,7 +50,18 @@ def child_calls(stream):
     return calls
 
 
-def runtime_model_errors(stream, expected_models):
+def dispatch_token_roles(jobs):
+    """Include failed attempts, with a fallback for pre-history ledgers."""
+    roles = {}
+    for job_id, job in jobs.items():
+        role = "verifier" if job_id.startswith("verifier--") else job_id.split("--", 1)[0]
+        for token in [*job.get("dispatchTokens", []), job.get("dispatchToken")]:
+            if token:
+                roles[token] = role
+    return roles
+
+
+def runtime_model_errors(stream, expected_models, token_roles=None):
     # Correlate runtime agent IDs with result-envelope roles, then check every
     # exposed identity, including messages emitted before the final result.
     # effectiveModel inside child-authored JSON is not runtime provenance.
@@ -62,8 +73,10 @@ def runtime_model_errors(stream, expected_models):
                 result = json.loads(data["content"])
             except ValueError:
                 continue
-            if isinstance(result, dict) and result.get("axis") in expected_models:
-                roles[event["agentId"]] = result["axis"]
+            if isinstance(result, dict):
+                role = (token_roles or {}).get(result.get("dispatchToken"), result.get("axis"))
+                if role in expected_models:
+                    roles[event["agentId"]] = role
     errors = []
     for event in stream:
         axis = roles.get(event.get("agentId"))
@@ -87,7 +100,7 @@ def source_read_errors(stream, ledger, plan):
                     result = json.loads(event["data"].get("content", ""))
                 except ValueError:
                     continue
-                if result == job["result"]:
+                if result == job.get("rawResult", job["result"]):
                     agent_ids.add(event["agentId"])
         reads = set()
 
@@ -221,7 +234,9 @@ def main():
         errors.append(f"CLI exited {proc.returncode}")
     stream = events(transcript)
     expected_models = {"01-standards": args.reviewer_model, "verifier": args.verifier_model}
-    errors.extend(runtime_model_errors(stream, expected_models))
+    jobs = RESULTS.state(directory)["jobs"]
+    token_roles = dispatch_token_roles(jobs)
+    errors.extend(runtime_model_errors(stream, expected_models, token_roles))
     # A separate parent turn prevents the production skill's completion/menu
     # behavior from swallowing this deliberately broken, out-of-band probe.
     try:
@@ -299,7 +314,7 @@ def main():
                 except ValueError:
                     continue
         for job in ledger["jobs"].values():
-            if job["status"] == "complete" and job["result"] not in child_results:
+            if job["status"] == "complete" and job.get("rawResult", job["result"]) not in child_results:
                 errors.append("coordinator altered a raw child result before acceptance")
         errors.extend(source_read_errors(stream, ledger, plan))
         missing = read_json(directory / "missing-result.json")

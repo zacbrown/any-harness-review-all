@@ -1,6 +1,31 @@
 # Result schema version 1
 
-Return one JSON object (not a Markdown fence). All fields below are required:
+Return one **minified** JSON object (not a Markdown fence), with no repeated
+assignment metadata or explanation. Prefer this compact form; every field is
+required:
+
+```json
+{"dispatchToken":"from start prompt","status":"complete","allMandatoryRead":true,"missingInputs":[],"effectiveModel":null,"sourceFilesRead":["src/lib.rs"],"findings":[]}
+```
+
+The opaque `dispatchToken` binds the result to this run, assignment and attempt.
+Never reuse another dispatch's token. `allMandatoryRead: true` attests that you
+read the entire assignment JSON and every path in its `mandatory` list, including
+every numbered part. It is a read receipt, not evidence that the helper can
+observe your tool calls. Do not set it from `status` or from a list of filenames.
+When context is missing/unread/truncated use `status: "incomplete"`,
+`allMandatoryRead: false`, list the blockers in `missingInputs`, and return no
+findings. Budget exhaustion also means incomplete.
+
+The coordinator passes this compact object unchanged to `accept --stdin` or
+`accept --result FILE`. The helper validates the token and explicit attestation,
+fills deterministic identity/chunk/read-input fields from the frozen assignment,
+and stores the full validated envelope. Do not echo the mandatory path list.
+`sourceFilesRead` still lists original repository-relative files actually reread.
+
+## Legacy full envelope
+
+Older consumers may return the full schema below. All shown fields are required:
 
 ```json
 {
@@ -21,6 +46,11 @@ Return one JSON object (not a Markdown fence). All fields below are required:
 ```
 
 `attempt` comes from the coordinator's start command, not the assignment file.
+`readInputs` must contain **every exact path in assignment.mandatory**. Extra
+reads are allowed. Reading the assignment JSON itself is required to discover
+the task, but its path is not a mandatory component and need not be echoed in
+`readInputs`; including it is also valid. `accept` checks the mandatory list,
+not a guessed list of source snapshots or just the first part of each component.
 `status` is `complete` or `incomplete`. For incomplete, list missing inputs or
 other blocking context in `missingInputs`; never return partial findings as a
 completed assignment. An empty `findings` array IS valid when complete.

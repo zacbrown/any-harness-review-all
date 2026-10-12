@@ -240,6 +240,7 @@ class TestCopilotPackages(Fixture):
             expected = "high" if assignment["axis"] == "01-standards" else "low"
             self.assertEqual(expected, assignment["reasoningEffort"])
             self.assertEqual(expected, RESULTS.start(directory, assignment["id"])["reasoning_effort"])
+            RESULTS.accept(directory, assignment["id"], failure="settings-only test dispatch")
         config["reasoningEfforts"]["01-standards"] = "medium"
         self.write(".copilot/review-all.json", json.dumps(config))
         with self.assertRaises(ValueError):
@@ -572,6 +573,7 @@ class TestCopilotResults(Fixture):
         self.assertEqual([], list(outside.iterdir()))
 
     def test_concurrent_completions_do_not_lose_receipts(self):
+        self.write(".copilot/review-all.json", '{"maxConcurrentAgents":6}')
         directory, manifest = self.prepare()
         work = list(manifest["assignments"].values())
 
@@ -651,6 +653,7 @@ class TestCopilotResults(Fixture):
                 dispatch = RESULTS.start(directory, assignment["id"])
                 self.assertEqual("gpt-6.1-sol", dispatch["model"])
                 self.assertEqual("high", dispatch["reasoning_effort"])
+                RESULTS.accept(directory, assignment["id"], failure="settings-only test dispatch")
     def test_any_unverified_vote_never_blocks(self):
         directory, _, _ = self.prepare_vote()
         RESULTS.make_verifiers(directory, votes=True)

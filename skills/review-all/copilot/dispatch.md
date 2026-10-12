@@ -4,7 +4,9 @@ You are a fresh, named custom subagent, not the coordinator. Never assume you
 inherited the conversation, skill, requirements, files, or check output.
 The dispatch names an absolute assignment JSON path. Read it, then EVERY file
 in `mandatory`, in order, including every numbered part. Follow continuation
-ranges if a read is truncated. Read the assigned source before reporting.
+ranges if a read is truncated. Assignment JSON is indented; use small
+`view_range` windows (e.g. 40 lines) through EOF, rather than repeatedly reading
+the first 20KB. Inputs are numbered 12KB parts. Read the assigned source before reporting.
 Do not mark a component read until all its bytes/parts were read.
 
 The package's scoped instructions apply only to their listed `files`, including
@@ -31,9 +33,11 @@ if the runtime exposes it; otherwise use null. Do not guess it from your persona
 Model tier names in canonical prose are rationale, not Copilot model IDs.
 The package shared-rules component supplies resolved quotas and tool names.
 
-Return ONLY one JSON object matching the mandatory result contract. Echo the
-run ID, package hash, assignment ID, axis, attempt, exact chunks, and the paths
-actually read. A complete review with no findings returns `findings: []`.
+Return ONLY one minified JSON object matching the mandatory result contract.
+Prefer the compact form: echo the dispatch token and explicitly attest
+`allMandatoryRead`, alongside status, missingInputs, effectiveModel,
+sourceFilesRead and findings. Do not repeat deterministic metadata or mandatory
+paths. A complete review with no findings returns `findings: []`.
 If ANY mandatory input is missing, inaccessible, truncated, or not read, return
 `status: "incomplete"` with `missingInputs` and no findings. Budget exhaustion
 is incomplete coverage, not a clean review.

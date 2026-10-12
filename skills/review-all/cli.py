@@ -181,7 +181,7 @@ def main(argv=None):
         elif operation in OPERATIONS:
             if operation in {"copilot-package", "copilot-gate"} and options.repo:
                 # These legacy parsers already accept --repo after their action.
-                args = [*args, "--repo", str(Path.cwd())] if operation == "copilot-package" and args[:1] == ["prepare"] else args
+                args = [*args, "--repo", str(Path.cwd())] if operation == "copilot-package" and args[:1] in (["prepare"], ["plan"]) else args
                 if operation == "copilot-gate":
                     args = ["--repo", str(Path.cwd()), *args]
             sys.argv = [str(SKILL / "scripts" / (operation + ".py")), *args]
