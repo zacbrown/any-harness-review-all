@@ -13,7 +13,7 @@ import uuid
 
 from copilot_common import RUNTIME, SCHEMA, SKILL, adapt, agent_id, atomic, body, cli_version
 from copilot_common import digest, encoded, file_hash, git, load_module, model_for, now, read_json
-from copilot_common import persona_text, reasoning_for, resource_hashes, run, safe_path
+from copilot_common import persona_text, reasoning_for, resource_hashes, run, safe_path, state_path
 from copilot_instructions import collect
 
 SELECT = load_module("select-files")
@@ -78,11 +78,18 @@ def select(records, scope, config):
     classes = SELECT.load_classes(SELECT.DEFAULT_CLASSES_PATH)
     includes, excludes = scope.get("paths", []), scope.get("exclude", [])
     scoped = [r for r in records if not includes or any(r["path"].startswith(p) for p in includes)]
+    secret_rules = SELECT.compile_rule_list(classes["secret"])
+    renamed_secrets = [r for r in scoped if r.get("oldPath") and SELECT.first_match(secret_rules, r["oldPath"])]
+    renamed_secret_paths = {r["path"] for r in renamed_secrets}
     result = SELECT.select(
-        scoped, SELECT.compile_rule_list(classes["secret"]), excludes, includes,
+        [r for r in scoped if r["path"] not in renamed_secret_paths], secret_rules, excludes, includes,
         SELECT.compile_rule_list(classes["exclude"]), config.get("maxFileDiffBytes", 160000),
         SELECT.compile_class_rules(classes["classes"]),
         SELECT.compile_content_signals(classes.get("content_signals", {})))
+    result["excluded"] += [{"path": r["path"], "reason": "secret",
+                           "pattern": SELECT.first_match(secret_rules, r["oldPath"])} for r in renamed_secrets]
+    result["counts"]["total"] += len(renamed_secrets)
+    result["counts"]["excluded"]["secret"] += len(renamed_secrets)
     result["outsideScope"] = [r["path"] for r in records if r not in scoped]
     decisions = AXES.build_agents(result["reviewable"], config.get("extraAgents", []), config.get("skipAgents", []))
     for axis, decision in decisions.items():
@@ -148,7 +155,8 @@ class Writer:
 
 def source_bytes(repo, revision, name):
     if revision == "worktree":
-        return safe_path(repo, name).read_bytes()
+        path = safe_path(repo, name)
+        return os.fsencode(os.readlink(path)) if path.is_symlink() else path.read_bytes()
     return git(repo, "show", (":" if revision == "index" else revision + ":") + name)
 
 
@@ -202,6 +210,7 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
         raise ValueError("unsupported request schemaVersion")
     version = cli_version(binary)
     root = repo / RUNTIME
+    state_path(repo, RUNTIME + "/.gitignore")
     root.mkdir(parents=True, exist_ok=True)
     if not (root / ".gitignore").exists():
         atomic(root / ".gitignore", b"*\n")
@@ -222,8 +231,8 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
         if key in config and (type(config[key]) is not int or config[key] < 0):
             raise ValueError(f"{key} must be a nonnegative integer")
     for key in ("stateFile", "historyFile", "checkpointDir", "snoozeFile"):
-        if key in config and not str(config[key]).startswith(RUNTIME + "/"):
-            raise ValueError(f"{key} must stay inside the Copilot state namespace {RUNTIME}/")
+        if key in config:
+            state_path(repo, config[key])
     if config.get("verifierVotes", 1) < 1:
         raise ValueError("verifierVotes must be >= 1")
     watched = {str(request_path): file_hash(request_path), str(config_path): file_hash(config_path)}
@@ -234,8 +243,15 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
         context[key] = writer.store(key, path.read_bytes())
     target = dict(request["target"])
     args, revision = diff_args(repo, target)
+    reviewed_head = revision if target["kind"] in {"range", "pr"} else head
     records = target_records(repo, args)
     selection, decisions = select(records, request["scope"], config)
+    secret_rules = SELECT.compile_rule_list(SELECT.load_classes(SELECT.DEFAULT_CLASSES_PATH)["secret"])
+    renamed_secret_paths = {r["path"] for r in records if r.get("oldPath")
+                            and SELECT.first_match(secret_rules, r["oldPath"])}
+    for name in request.get("supportingFiles", []):
+        if name in renamed_secret_paths or SELECT.first_match(secret_rules, name):
+            raise ValueError(f"supporting context matches secret exclusion: {name}")
     paths = [r["path"] for r in selection["reviewable"]]
     selected = [r for r in records if r["path"] in paths]
     instruction_files = list(dict.fromkeys(paths + request.get("supportingFiles", [])))
@@ -255,13 +271,13 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
     context["config"] = writer.store("config", config)
     context["dismissals"] = writer.store("dismissals", [])
     all_dismissals = []
-    history_path = repo / config.get("historyFile", RUNTIME + "/history.jsonl")
+    history_path = state_path(repo, config.get("historyFile", RUNTIME + "/history.jsonl"))
     watched[str(history_path)] = file_hash(history_path)
     context["history"] = writer.store("history", history_path.read_bytes() if history_path.exists() else b"")
-    state_path = repo / config.get("stateFile", RUNTIME + "/state.json")
-    watched[str(state_path)] = file_hash(state_path)
-    if state_path.exists():
-        state = read_json(state_path)
+    lifecycle_path = state_path(repo, config.get("stateFile", RUNTIME + "/state.json"))
+    watched[str(lifecycle_path)] = file_hash(lifecycle_path)
+    if lifecycle_path.exists():
+        state = read_json(lifecycle_path)
         if state.get("harness") != "copilot":
             errors.append("state lacks harness=copilot; refusing Claude or unidentified lifecycle state")
         else:
@@ -273,9 +289,11 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
             all_dismissals = entries
             context["dismissals"] = writer.store("dismissals", sorted(entries,
                 key=lambda x: x.get("last_seen_at", ""), reverse=True)[:30])
-    target_matches = revision == "worktree" or not git(
+    untracked = [n for n in git(repo, "ls-files", "--others", "--exclude-standard", "-z").decode().split("\0")
+                 if n and not n.startswith((RUNTIME + "/", ".copilot/reports/"))]
+    target_matches = revision == "worktree" or (not untracked and not git(
         repo, "diff", "--no-ext-diff", "--no-textconv", "--name-only",
-        *([] if revision == "index" else [revision]))
+        *([] if revision == "index" else [revision])))
     results = checks(repo, request["checks"], writer, target_matches)
     context["checks"] = writer.store("checks", results)
     context["checkOutput"] = [p for row in results for p in row["output"]]
@@ -307,8 +325,6 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
                          "parts": writer.store("source-" + digest(name.encode())[:16], data),
                          "sha256": digest(data)}
     for name in request.get("supportingFiles", []):
-        if SELECT.first_match(SELECT.compile_rule_list(SELECT.load_classes(SELECT.DEFAULT_CLASSES_PATH)["secret"]), name):
-            raise ValueError(f"supporting context matches secret exclusion: {name}")
         data = source_bytes(repo, revision, name)
         snapshot = safe_path(directory / "sources", name)
         atomic(snapshot, data)
@@ -364,7 +380,8 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
                 "contextErrors": errors, "timeoutSeconds": config.get("agentTimeoutSeconds", 600),
             }
     manifest = {"schemaVersion": SCHEMA, "harness": "copilot", "runId": run_id, "createdAt": now(),
-                "repo": str(repo), "head": head, "target": target, "diffArgs": args, "sourceRevision": revision,
+                "repo": str(repo), "head": reviewed_head, "localHead": head,
+                "target": target, "diffArgs": args, "sourceRevision": revision,
                 "indexHash": digest(git(repo, "ls-files", "--stage", "-z")),
                 "checksMatchTarget": target_matches,
                 "diffSha256": digest(exact_diff), "scope": request["scope"], "selection": selection,
@@ -379,7 +396,7 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
                 "canonicalChunks": [[{k: v for k, v in p.items() if k != "data"} for p in c] for c in canonical],
                 "assignments": assignments, "artifacts": writer.artifacts}
     manifest["inputFingerprint"] = digest(encoded({
-        k: manifest[k] for k in ("head", "indexHash", "target", "diffSha256", "scope", "config",
+        k: manifest[k] for k in ("head", "localHead", "indexHash", "target", "diffSha256", "scope", "config",
                                 "instructions", "watched", "treeHashes", "resources", "runtime", "checks")}))
     manifest["packageHash"] = package_hash(manifest)
     for assignment in assignments.values():
@@ -397,7 +414,7 @@ def fresh(directory):
     if package_hash(manifest) != manifest["packageHash"]:
         raise ValueError("package manifest integrity mismatch")
     repo = Path(manifest["repo"])
-    if git(repo, "rev-parse", "HEAD").decode().strip() != manifest["head"] or tree_hashes(repo) != manifest["treeHashes"]:
+    if git(repo, "rev-parse", "HEAD").decode().strip() != manifest["localHead"] or tree_hashes(repo) != manifest["treeHashes"]:
         raise ValueError("reviewed source/index inputs changed")
     if digest(git(repo, "ls-files", "--stage", "-z")) != manifest["indexHash"]:
         raise ValueError("reviewed index/diff changed")

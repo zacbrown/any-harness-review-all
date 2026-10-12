@@ -1,6 +1,7 @@
 """Deterministic Copilot handoff tests; no model, network, or authentication."""
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 import json
 import os
 from pathlib import Path
@@ -94,8 +95,112 @@ class Fixture(unittest.TestCase):
         RESULTS.make_verifiers(directory)
         return RESULTS.finalize(directory)
 
+    def divergent_target(self, kind):
+        base = self.git("rev-parse", "HEAD").decode().strip()
+        self.git("add", "src/a.py")
+        self.git("-c", "commit.gpgsign=false", "commit", "-qm", "reviewed revision")
+        reviewed = self.git("rev-parse", "HEAD").decode().strip()
+        self.write("src/b.py", "unrelated = True\n")
+        self.git("add", "src/b.py")
+        self.git("-c", "commit.gpgsign=false", "commit", "-qm", "local checkout")
+        self.request["target"] = {"kind": "range", "base": base, "head": reviewed} if kind == "range" else {
+            "kind": "pr", "number": 1}
+        metadata = {"baseRefOid": base, "headRefOid": reviewed, "title": "fixture", "body": ""}
+        return reviewed, patch.object(PACKAGE, "run", return_value=json.dumps(metadata).encode()) if kind == "pr" else nullcontext()
+
 
 class TestCopilotPackages(Fixture):
+    def test_state_paths_reject_traversal_absolute_and_symlink_escapes(self):
+        outside = self.root / "outside.json"
+        outside.write_text("preserve me")
+        link = self.repo / ".copilot/review-all/link"
+        link.parent.mkdir(parents=True)
+        link.symlink_to(self.root, target_is_directory=True)
+        for key in ("stateFile", "historyFile", "checkpointDir", "snoozeFile"):
+            for value in (".copilot/review-all/../../../outside.json", str(outside),
+                          ".copilot/review-all/link/outside.json", ".copilot/review-all"):
+                with self.subTest(key=key, value=value):
+                    self.write(".copilot/review-all.json", json.dumps({key: value}))
+                    with self.assertRaises(ValueError):
+                        self.prepare()
+                    self.assertEqual("preserve me", outside.read_text())
+
+    def test_runtime_directory_cannot_be_a_symlink_outside_namespace(self):
+        (self.repo / ".copilot").mkdir()
+        (self.repo / ".copilot/review-all").symlink_to(self.root, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            self.prepare()
+        self.assertFalse((self.root / ".gitignore").exists())
+
+    def test_secret_rename_never_serializes_diff_or_source(self):
+        for old, new in ((".env", "src/env.py"), ("credentials.pem", "src/key.py"),
+                         ("src/public.py", ".env.production")):
+            self.write(old, f"SECRET_RENAME_SENTINEL {old}\n")
+            self.git("add", old)
+        self.git("-c", "commit.gpgsign=false", "commit", "-qm", "tracked secrets")
+        for old, new in ((".env", "src/env.py"), ("credentials.pem", "src/key.py"),
+                         ("src/public.py", ".env.production")):
+            self.git("mv", old, new)
+        self.request["scope"]["paths"] = ["src", ".env.production"]
+        directory, manifest = self.prepare()
+        excluded = {r["path"]: r["reason"] for r in manifest["selection"]["excluded"]}
+        self.assertEqual({"src/env.py": "secret", "src/key.py": "secret", ".env.production": "secret"}, excluded)
+        self.assertEqual(3, manifest["selection"]["counts"]["excluded"]["secret"])
+        self.assertEqual(["src/a.py"], list(manifest["sources"]))
+        for path in directory.rglob("*"):
+            if path.is_file():
+                self.assertNotIn(b"SECRET_RENAME_SENTINEL", path.read_bytes(), str(path))
+        self.assertTrue(PACKAGE.fresh(directory))
+
+    def test_symlink_snapshots_match_git_blobs_and_detect_retargeting(self):
+        link = self.repo / "src/link.py"
+        link.symlink_to("a.py")
+        self.git("add", "src/link.py")
+        directory, manifest = self.prepare()
+        source = manifest["sources"]["src/link.py"]
+        blob = self.git("show", ":src/link.py")
+        self.assertEqual(b"a.py", blob)
+        self.assertEqual(blob, Path(source["snapshotPath"]).read_bytes())
+        self.assertEqual(blob, b"".join(Path(p).read_bytes() for p in source["parts"]))
+        self.assertEqual(digest(blob), source["sha256"])
+        self.assertTrue(PACKAGE.fresh(directory))
+        link.unlink()
+        link.symlink_to("b.py")
+        with self.assertRaisesRegex(ValueError, "inputs changed"):
+            PACKAGE.fresh(directory)
+
+    def test_renamed_secret_cannot_be_reintroduced_as_supporting_context(self):
+        self.write(".env", "SECRET_SUPPORT_SENTINEL\n")
+        self.git("add", ".env")
+        self.git("-c", "commit.gpgsign=false", "commit", "-qm", "tracked secret")
+        self.git("mv", ".env", "src/innocent.py")
+        self.request["scope"]["paths"] = ["src/a.py"]
+        self.request["supportingFiles"] = ["src/innocent.py"]
+        with self.assertRaisesRegex(ValueError, "secret exclusion"):
+            self.prepare()
+        for path in (self.repo / ".copilot/review-all").rglob("*"):
+            if path.is_file():
+                self.assertNotIn(b"SECRET_SUPPORT_SENTINEL", path.read_bytes())
+
+    def test_changed_symlink_snapshots_use_new_link_text(self):
+        link = self.repo / "src/link.py"
+        link.symlink_to("a.py")
+        self.git("add", "src/link.py")
+        self.git("-c", "commit.gpgsign=false", "commit", "-qm", "baseline symlink")
+        link.unlink()
+        link.symlink_to("b.py")
+        _, manifest = self.prepare()
+        self.assertEqual(b"b.py", Path(manifest["sources"]["src/link.py"]["snapshotPath"]).read_bytes())
+
+    def test_dangling_internal_symlink_and_supporting_symlink_use_link_text(self):
+        (self.repo / "src/link.py").symlink_to("missing.py")
+        (self.repo / "src/support.py").symlink_to("b.py")
+        self.git("add", "src/link.py", "src/support.py")
+        self.request["supportingFiles"] = ["src/support.py"]
+        _, manifest = self.prepare()
+        for name, expected in (("src/link.py", b"missing.py"), ("src/support.py", b"b.py")):
+            self.assertEqual(expected, Path(manifest["sources"][name]["snapshotPath"]).read_bytes())
+
     def test_model_defaults_and_explicit_overrides(self):
         for axis in PACKAGE.AXES.AGENT_IDS + ["verifier", "coordinator"]:
             self.assertEqual("gpt-6.1-sol", model_for(axis, {}))
@@ -234,6 +339,29 @@ class TestCopilotPackages(Fixture):
         self.assertIsNone(manifest["checks"][2]["exitCode"])
         self.assertFalse(manifest["checksMatchTarget"])
 
+    def test_staged_checks_skip_untracked_sources_without_executing(self):
+        self.git("add", "src/a.py")
+        self.write("tests/untracked_test.py", "raise AssertionError('not in index')\n")
+        self.request["target"] = {"kind": "staged"}
+        marker = self.root / "check-ran"
+        self.request["checks"][2] = {"name": "Tests", "command": [
+            sys.executable, "-c", f"from pathlib import Path; Path({str(marker)!r}).touch()"]}
+        _, manifest = self.prepare()
+        self.assertFalse(marker.exists())
+        self.assertFalse(manifest["checksMatchTarget"])
+        self.assertEqual("SKIP", manifest["checks"][2]["status"])
+        self.assertIsNone(manifest["checks"][2]["exitCode"])
+
+    def test_staged_checks_run_when_only_untracked_files_are_runtime_artifacts(self):
+        self.git("add", "src/a.py")
+        self.write(".copilot/reports/old.md", "old report\n")
+        self.request["target"] = {"kind": "staged"}
+        self.request["checks"][2] = {"name": "Tests", "command": [sys.executable, "-c", "print('index checked')"]}
+        directory, manifest = self.prepare()
+        self.assertTrue(manifest["checksMatchTarget"])
+        self.assertEqual("PASS", manifest["checks"][2]["status"])
+        self.assertTrue(PACKAGE.fresh(directory))
+
     def test_large_unicode_parts_are_lossless_and_bounded(self):
         data = ("wide: \u00e9\n" * 5000).encode()
         parts = PACKAGE.split_bytes(data, 11)
@@ -300,6 +428,99 @@ class TestCopilotPackages(Fixture):
 
 
 class TestCopilotResults(Fixture):
+    def assert_reviewed_identity(self, kind):
+        reviewed, mock_pr = self.divergent_target(kind)
+        local_head = self.git("rev-parse", "HEAD").decode().strip()
+        with mock_pr:
+            directory, manifest, _ = self.prepare_vote(votes=1)
+        self.assertEqual(reviewed, manifest["head"])
+        self.assertEqual(local_head, manifest["localHead"])
+        self.assertNotEqual(reviewed, local_head)
+        self.assertTrue(PACKAGE.fresh(directory))
+        verdict = RESULTS.finalize(directory)
+        self.assertEqual(reviewed, verdict["reviewedSha"])
+        self.assertEqual(1, GATE.validate_verdict(directory, manifest["runId"], manifest["createdAt"], "--unstaged"))
+        RESULTS.persist_state(directory)
+        lifecycle = read_json(self.repo / ".copilot/review-all/state.json")["findings"][self.candidate()["root_cause_key"]]
+        self.assertEqual(reviewed, lifecycle["first_seen_sha"])
+        self.assertEqual(reviewed, lifecycle["last_seen_sha"])
+
+    def test_range_identity_uses_resolved_head_in_verdict_and_lifecycle(self):
+        self.assert_reviewed_identity("range")
+
+    def test_pr_identity_uses_resolved_head_in_verdict_and_lifecycle(self):
+        self.assert_reviewed_identity("pr")
+
+    def test_local_head_change_invalidates_historical_review(self):
+        _, mock_pr = self.divergent_target("range")
+        with mock_pr:
+            directory, _ = self.prepare()
+        self.git("-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "new checkout commit")
+        with self.assertRaisesRegex(ValueError, "inputs changed"):
+            PACKAGE.fresh(directory)
+
+    def assert_supporting_context(self, kind):
+        self.write("support/limits.py", "threshold = 1\n")
+        self.git("add", "support/limits.py")
+        self.git("-c", "commit.gpgsign=false", "commit", "-qm", "supporting baseline")
+        self.write("support/AGENTS.md", "Supporting scope rule.\n")
+        self.request["supportingFiles"] = ["support/limits.py"]
+        if kind == "staged":
+            self.git("add", "src/a.py")
+            self.request["target"] = {"kind": "staged"}
+        else:
+            self.divergent_target("range")
+        self.write("support/limits.py", "threshold = 999\n")
+        directory, _, first = self.prepare_vote(votes=2)
+        RESULTS.make_verifiers(directory, votes=True)
+        plan = read_json(directory / "verification.json")
+        self.assertEqual(2, len(plan["assignments"]))
+        for verifier in plan["assignments"].values():
+            source = verifier["sources"]["support/limits.py"]
+            self.assertEqual("threshold = 1\n", "".join(Path(p).read_text() for p in source["parts"]))
+            self.assertTrue(set(source["parts"]).issubset(verifier["mandatory"]))
+            instruction_paths = [p for p in verifier["mandatory"] if "-instructions." in p]
+            scoped = json.loads("".join(Path(p).read_text() for p in instruction_paths))
+            rule = next(i for i in scoped if i["source"].endswith("/support/AGENTS.md"))
+            self.assertEqual(["support/limits.py"], rule["files"])
+            self.assertIn("Supporting scope rule.", rule["content"])
+            result = self.result(verifier, findings=[self.judgment(verifier)])
+            result["readInputs"] = [p for p in result["readInputs"] if p not in source["parts"]]
+            with self.assertRaisesRegex(ValueError, "read coverage"):
+                RESULTS.validate(result, verifier, 1)
+        second = next(a for a in plan["assignments"].values() if a["vote"] == 2)
+        self.accept(directory, second, [self.judgment(second)])
+        self.assertFalse(RESULTS.finalize(directory)["partial"])
+
+    def test_staged_verifiers_and_votes_receive_supporting_snapshots_and_rules(self):
+        self.assert_supporting_context("staged")
+
+    def test_historical_verifiers_and_votes_receive_supporting_snapshots_and_rules(self):
+        self.assert_supporting_context("range")
+
+    def test_nested_state_paths_persist_inside_namespace(self):
+        config = {"stateFile": ".copilot/review-all/custom/state.json",
+                  "historyFile": ".copilot/review-all/custom/history.jsonl"}
+        self.write(".copilot/review-all.json", json.dumps(config))
+        directory, manifest = self.prepare()
+        self.finish_empty(directory, manifest)
+        self.assertTrue(RESULTS.persist_state(directory)["persisted"])
+        self.assertEqual("copilot", read_json(self.repo / config["stateFile"])["harness"])
+        self.assertTrue((self.repo / config["historyFile"]).is_file())
+
+    def test_persistence_rechecks_state_namespace_after_symlink_change(self):
+        self.write(".copilot/review-all.json", json.dumps({
+            "stateFile": ".copilot/review-all/custom/state.json",
+            "historyFile": ".copilot/review-all/custom/history.jsonl"}))
+        directory, manifest = self.prepare()
+        self.finish_empty(directory, manifest)
+        outside = self.root / "outside"
+        outside.mkdir()
+        (self.repo / ".copilot/review-all/custom").symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            RESULTS.persist_state(directory)
+        self.assertEqual([], list(outside.iterdir()))
+
     def test_concurrent_completions_do_not_lose_receipts(self):
         directory, manifest = self.prepare()
         work = list(manifest["assignments"].values())

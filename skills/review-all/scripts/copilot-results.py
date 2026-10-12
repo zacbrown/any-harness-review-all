@@ -11,7 +11,7 @@ import statistics
 import sys
 
 from copilot_common import SCHEMA, SKILL, agent_id, atomic, digest, encoded, load_module
-from copilot_common import RUNTIME, model_for, now, persona_text, read_json, reasoning_for, run
+from copilot_common import RUNTIME, model_for, now, persona_text, read_json, reasoning_for, run, state_path
 
 PACKAGE = load_module("copilot-package")
 GATE = load_module("gate-verdict")
@@ -260,19 +260,21 @@ def make_verifiers(directory, votes=False):
     for axis, batch in groups.items():
         prefix = "verify-" + axis + ("-votes" if votes else "-first")
         names = list(dict.fromkeys(f["file"] for f in batch))
+        originating_ids = {f["id"].split(":", 1)[0] for f in batch}
+        originating = [job for job_id, job in manifest["assignments"].items() if job_id in originating_ids]
+        context_names = list(dict.fromkeys(names + [n for job in originating for n in job["sources"]]))
         mandatory = common + persona
         mandatory += writer.store(prefix + "-candidates", batch)
-        scoped = [{**item, "files": [f for f in item["files"] if f in names]} for item in manifest["instructions"]
-                  if set(item["files"]) & set(names)]
+        scoped = [{**item, "files": [f for f in item["files"] if f in context_names]} for item in manifest["instructions"]
+                  if set(item["files"]) & set(context_names)]
         mandatory += writer.store(prefix + "-instructions", scoped)
-        for name in names:
+        for name in context_names:
             mandatory += manifest["sources"][name]["parts"]
         for pack, pack_files in manifest["decisions"]["rule_packs"].items():
-            if manifest["config"].get("languageRules", True) and set(pack_files) & set(names):
+            if manifest["config"].get("languageRules", True) and set(pack_files) & set(context_names):
                 mandatory += writer.store(prefix + "-rules-" + pack, (SKILL / "rules" / pack).read_bytes())
-        for job in manifest["assignments"].values():
-            if job["axis"] == axis and set(job["files"]) & set(names):
-                mandatory += [p for p in job["mandatory"] if "-diff-" in p]
+        for job in originating:
+            mandatory += [p for p in job["mandatory"] if "-diff-" in p]
         for vote in vote_numbers:
             job_id = f"verifier--{axis}--{vote}"
             if job_id in plan["assignments"]:
@@ -283,7 +285,7 @@ def make_verifiers(directory, votes=False):
                 "reasoningEffort": reasoning_for(manifest["config"]),
                 "runId": manifest["runId"], "packageHash": manifest["packageHash"], "vote": vote,
                 "chunks": sorted({c for a in manifest["assignments"].values() if a["axis"] == axis for c in a["chunks"]}),
-                "files": names, "sources": {n: manifest["sources"][n] for n in names}, "candidates": batch,
+                "files": names, "sources": {n: manifest["sources"][n] for n in context_names}, "candidates": batch,
                 "mandatory": list(dict.fromkeys(mandatory)), "contextErrors": manifest["contextErrors"],
                 "timeoutSeconds": manifest["config"].get("verifierTimeoutSeconds", 300)}
             path = directory / "assignments" / (job_id + ".json")
@@ -391,7 +393,8 @@ def persist_state(directory):
     verdict = read_json(directory / "gate-verdict.json")
     findings = read_json(directory / "adjudicated.json")
     repo = Path(manifest["repo"])
-    path = repo / manifest["config"].get("stateFile", RUNTIME + "/state.json")
+    path = state_path(repo, manifest["config"].get("stateFile", RUNTIME + "/state.json"))
+    history_path = state_path(repo, manifest["config"].get("historyFile", RUNTIME + "/history.jsonl"))
     current = read_json(path) if path.exists() else {"harness": "copilot", "version": 1, "migrations": [], "findings": {}}
     seen = [f["root_cause_key"] for f in findings if f["verdict"] in {"keep", "appendix", "unverified"}]
     changed = []
@@ -413,7 +416,6 @@ def persist_state(directory):
     verifier_text = (SKILL / "agents/verifier.md").read_text()
     version = next(int(line.split(":", 1)[1]) for line in verifier_text.splitlines() if line.startswith("version:"))
     stamp = now()
-    history_path = repo / manifest["config"].get("historyFile", RUNTIME + "/history.jsonl")
     history = history_path.read_bytes() if history_path.exists() else b""
     for finding in findings:
         key = finding["root_cause_key"]

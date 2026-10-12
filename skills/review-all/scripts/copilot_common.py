@@ -90,6 +90,15 @@ def file_hash(path):
     return digest(path.read_bytes()) if path.exists() else None
 
 
+def state_path(repo, relative):
+    """Resolve lifecycle paths without allowing traversal or symlink escapes."""
+    root = Path(repo).resolve() / RUNTIME
+    path = safe_path(repo, relative).resolve()
+    if path == root or not path.is_relative_to(root):
+        raise ValueError(f"state path must stay inside the Copilot state namespace {RUNTIME}/")
+    return path
+
+
 def body(text):
     return text.split("---", 2)[2].lstrip() if text.startswith("---\n") else text
 
