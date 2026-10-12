@@ -282,7 +282,7 @@ def make_verifiers(directory, votes=False):
             assignment = {
                 "schemaVersion": SCHEMA, "id": job_id, "kind": "verifier", "axis": axis,
                 "agent": agent_id("verifier"), "model": model_for("verifier", manifest["config"]),
-                "reasoningEffort": reasoning_for(manifest["config"]),
+                "reasoningEffort": reasoning_for(manifest["config"], "verifier"),
                 "runId": manifest["runId"], "packageHash": manifest["packageHash"], "vote": vote,
                 "chunks": sorted({c for a in manifest["assignments"].values() if a["axis"] == axis for c in a["chunks"]}),
                 "files": names, "sources": {n: manifest["sources"][n] for n in context_names}, "candidates": batch,

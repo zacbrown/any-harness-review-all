@@ -59,14 +59,22 @@ Discover CI fallback commands, test scoping, template compiler requirements,
 spec existence, dependencies and optional runtime probes as in the workflow.
 `init` follows the canonical wizard, writing only Copilot configuration.
 
-Model defaults are in `copilot/models.json`: **gpt-6.1-sol (GPT 6.1 Sol)** with
-**high reasoning effort** for all ten reviewers and the verifier. These are
-explicit Copilot settings, not equivalents of Claude's opus/sonnet/haiku tiers.
-Config `models` maps canonical axis IDs to explicit Copilot IDs;
-`verifierModel` overrides the verifier and `reasoningEffort` overrides the shared
-reasoning default. Validate model and effort availability in the current
-runtime. If unavailable, ask for an explicit substitution (headless: error),
-record it in configuration and rebuild; never silently fall back.
+Model defaults are in `copilot/models.json`: **gpt-6-luna / medium** for
+01-standards and 03-dry-smells; **gpt-6.1-sol / high** for the other eight
+reviewers and coordinator; **claude-opus-5.5 / high** for verifier and eval judge.
+**gpt-6-astra / high** is reserved for an explicitly selected difficult-finding
+follow-up, not automatic escalation of the security axis. Keep verifierVotes=1
+unless explicitly configured otherwise. Deterministic pipeline steps stay in Python.
+
+Config `models` maps axis/role IDs to explicit Copilot IDs; `verifierModel`
+overrides `models.verifier`. Effort precedence: `reasoningEfforts[role]`, explicit
+shared `reasoningEffort`, packaged role default, packaged shared default.
+Use the resolved assignment settings, never the coordinator's settings for every
+child. Generated profiles pin `modelPolicy: required`; reinstall with matching
+configuration when changing model overrides. Do not use an Auto parent session.
+Validate model and effort availability in the current runtime. If unavailable,
+ask for an explicit substitution (headless: error), record it in configuration
+and rebuild; never silently fall back.
 Report requested models and runtime-exposed effective models; use null when
 effective identity is unavailable. Model self-identification is not provenance.
 
@@ -231,9 +239,20 @@ findings to fixed/stale on a partial review. Human dismissal actions remain
 coordinator-owned. Do not reuse machine decisions across runs in this adapter.
 In a wrapper-driven gate, DO NOT persist state yourself: the wrapper does so
 only after checking the verdict against the original input hashes.
-Follow-up explanations, test suggestions and deep dives remain read-only;
-the coordinator can perform them inline without granting reviewers editing or
-delegation. Writes/fixes/publication still require the canonical confirmations
+Follow-up explanations and test suggestions remain read-only and use the
+coordinator inline. For an explicitly selected difficult-finding deep dive, run:
+
+```sh
+python3 SKILL_ROOT/scripts/copilot-package.py model-settings --repo REPO --role deep-dive
+```
+
+Dispatch `agent_type: review-all-deep-dive` with the returned `model` and
+`reasoning_effort`. Supply the selected finding/question, target/scope, enabled
+scoped instructions, user requirements, shared rules, original source snapshots,
+diff and check evidence. The child returns read-only analysis and fix strategies;
+it cannot edit, delegate, or alter gate receipts. New findings need a fresh review
+package. Use this role only when the user selects investigation, never as an
+automatic extra reviewer. Writes/fixes/publication still require the canonical confirmations
 and read-before-edit guardrails. Post-fix delta review is a fresh package.
 Scheduling is conditional on an installed host scheduler, never assumed.
 

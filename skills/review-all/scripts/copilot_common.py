@@ -140,8 +140,20 @@ def model_for(axis, config):
     return value
 
 
-def reasoning_for(config):
-    value = config.get("reasoningEffort", models()["reasoningEffort"])
+def reasoning_for(config, role="coordinator"):
+    """Explicit role override > explicit shared override > role default > default."""
+    defaults = models()
+    overrides = config.get("reasoningEfforts", {})
+    if not isinstance(overrides, dict):
+        raise ValueError("reasoningEfforts must be a role-to-effort object")
+    # Reject invalid settings even for a role that this diff does not activate.
+    for key, effort in overrides.items():
+        if effort not in REASONING_EFFORTS:
+            raise ValueError(f"unsupported reasoningEfforts[{key!r}]: {effort!r}")
+    if "reasoningEffort" in config and config["reasoningEffort"] not in REASONING_EFFORTS:
+        raise ValueError(f"unsupported reasoningEffort: {config['reasoningEffort']!r}")
+    value = overrides.get(role, config.get("reasoningEffort",
+        defaults.get("reasoningEfforts", {}).get(role, defaults["reasoningEffort"])))
     if value not in REASONING_EFFORTS:
         raise ValueError(f"unsupported reasoningEffort: {value!r}")
     return value

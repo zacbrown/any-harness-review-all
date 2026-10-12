@@ -1,7 +1,8 @@
 # Native GitHub Copilot CLI support
 
 The Copilot adapter runs `/review-all` with ten namespaced custom reviewer
-profiles and an independent `review-all-verifier`. It does not replace the
+profiles, an independent `review-all-verifier`, and a read-only follow-up
+`review-all-deep-dive` profile. It does not replace the
 methodology with Copilot's built-in code-review agent. Claude Code's skill,
 installation, scripts and evaluation runner remain unchanged.
 
@@ -66,12 +67,18 @@ Use **`.copilot/review-all.json`**, never the Claude configuration:
 ```json
 {
   "models": {
-    "02-bugs-security": "gpt-6.1-sol",
-    "04-consistency-history": "gpt-6.1-sol"
+    "01-standards": "gpt-6-luna",
+    "03-dry-smells": "gpt-6-luna",
+    "coordinator": "gpt-6.1-sol",
+    "judge": "claude-opus-5.5",
+    "deep-dive": "gpt-6-astra"
   },
-  "verifierModel": "gpt-6.1-sol",
-  "reasoningEffort": "high",
-  "verifierVotes": 3,
+  "verifierModel": "claude-opus-5.5",
+  "reasoningEfforts": {
+    "01-standards": "medium",
+    "03-dry-smells": "medium"
+  },
+  "verifierVotes": 1,
   "maxConcurrentAgents": 2,
   "chunkMaxFiles": 40,
   "chunkMaxBytes": 200000,
@@ -87,35 +94,70 @@ Review-affecting canonical keys retain their meanings (see
 |---|---|
 | State/history/checkpoints | `.copilot/review-all/`; never imports Claude state |
 | Reports | `.copilot/reports/` by default |
-| `models` | Explicit Copilot model ID per canonical axis |
-| `verifierModel` | Explicit Copilot model ID, not a Claude short tier |
-| `reasoningEffort` | Shared reviewer/verifier reasoning effort; defaults to `high` |
+| `models` | Explicit Copilot model ID per canonical axis or `coordinator`, `verifier`, `judge`, `deep-dive` role |
+| `verifierModel` | Explicit verifier model ID; takes precedence over `models.verifier` |
+| `reasoningEffort` | Optional shared override for all roles, including roles with a different packaged default |
+| `reasoningEfforts` | Map of role IDs to efforts; overrides the shared setting for those roles |
 | `maxConcurrentAgents` | Coordinator's optional upper bound, also bounded by actual runtime capacity |
 | Gate verdict | Authoritative verdict is per-run `runs/RUN_ID/gate-verdict.json`; legacy singleton `gateVerdictFile` is not a CI oracle |
 | Cache/checkpoint reuse | Cross-run reuse disabled; current-run completion receipts remain persistent |
 | `extraAgents` | Unknown/uninstalled custom axes fail explicitly rather than silently losing coverage |
 
-Defaults: **GPT 6.1 Sol (`gpt-6.1-sol`) with High (`high`) reasoning** for all ten
-reviewers, the verifier, and CLI-launched coordinators/judges.
-`copilot/models.json` is the single source of these defaults; explicit per-role
-model overrides remain supported. Generated profiles declare
-`model: "gpt-6.1-sol"` and `reasoning-effort: "high"`. Assignment packages record
-both settings, and native task dispatches pass `reasoning_effort: "high"`
-explicitly. This is runtime configuration, not just a prompting instruction.
-Availability depends
-on account, provider and organization policy. An unavailable ID must be
-explicitly substituted or fail; no silent fallback. The coordinator records
-requested IDs and runtime-exposed effective identity when available. A model's
-self-identification is not reliable runtime provenance.
+`copilot/models.json` is the single source of packaged defaults:
 
-Headless/eval/integration CLI entry points also pass `--reasoning-effort high`.
-Their `--model` and `--reasoning-effort` options override the coordinator (and
-the eval judge) settings; reviewer/verifier settings still come from the review
-configuration. The integration runner applies its options to both parent and
-test children. The headless wrapper also respects `models.coordinator` and
-`reasoningEffort` from the repository configuration when no CLI override is
-given. An interactive parent session keeps its own model settings; the skill
-explicitly configures its review children.
+| Stage / role | Model ID | Effort |
+|---|---|---|
+| Coordinator, reporting, ordinary follow-ups, fixes/test generation | `gpt-6.1-sol` | `high` |
+| 01 standards, 03 DRY/smells | `gpt-6-luna` | `medium` |
+| 02 bugs/security, 04 consistency/history, 05 simplification, 06 security deep dive, 07 performance, 08 test quality, 09 API contract, 10 a11y/i18n | `gpt-6.1-sol` | `high` |
+| Verifier and all verifier votes | `claude-opus-5.5` | `high` |
+| Independent eval rubric judge | `claude-opus-5.5` | `high` |
+| Explicit difficult-finding investigation (`deep-dive`) | `gpt-6-astra` | `high` |
+
+Discovery, filtering, hashing, check execution, deduplication and gate calculation
+remain deterministic code. Astra is an explicit follow-up, not automatic escalation
+of the 06 security reviewer. `verifierVotes` remains 1 by default.
+
+Effort precedence is: `reasoningEfforts[role]`, then explicit `reasoningEffort`,
+then the packaged role default, then the packaged shared default (`high`). Thus
+an existing `reasoningEffort: high` configuration still raises Luna to high;
+omit it to use the mixed preset. Explicit model overrides retain their precedence.
+
+Generated profiles declare the resolved `model`, `reasoningEffort`, and
+`modelPolicy: required`. Assignment packages bind model/effort to the input hash;
+native task dispatches pass both `model` and `reasoning_effort` explicitly.
+Reinstall profiles with the same configuration after changing model overrides.
+An unavailable model/effort must cause an explicit substitution and rebuilt
+package (or a headless error), never an unrecorded fallback. Do not use an Auto
+parent session for this fixed-model workflow. Record runtime-exposed effective
+identity when available; model self-identification is not provenance.
+
+The headless wrapper uses `models.coordinator` and the coordinator's resolved
+effort unless `--model` / `--reasoning-effort` override them. An interactive
+parent keeps its own settings; start it with Sol/high for the recommended preset.
+
+The eval runner's `--model` / `--reasoning-effort` affect only the coordinator.
+`--judge-model` / `--judge-reasoning-effort` independently override the judge.
+`REVIEW_ALL_COPILOT_CONFIG_JSON` supplies fixture/profile settings and the default
+coordinator/judge settings; CLI flags win only for their named role. Each case
+run records requested launch settings in `model-settings.json` alongside logs.
+The integration runner has separate `--reviewer-model`,
+`--reviewer-reasoning-effort`, `--verifier-model`, and
+`--verifier-reasoning-effort` options; its original model/effort flags now affect
+only the parent. It defaults to the mixed Sol/Luna/Opus configuration.
+
+This preset is a candidate for evaluation, not a measured quality improvement.
+Compare missed defects, false positives, completion failures, latency and credits
+against all-Sol/high. For that baseline, set all ten axis IDs plus `coordinator`,
+`judge`, and `deep-dive` in `models` to `gpt-6.1-sol`, set `verifierModel` to the
+same ID, set `reasoningEffort: high`, and remove `reasoningEfforts` overrides.
+Keep the rubric judge fixed across experimental arms when comparing review models.
+
+Model IDs and dispatch controls are documented in the
+[Copilot CLI reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference).
+Access remains subject to plan and organization policy. The existing CLI 1.0.95
+smoke evidence below predates this preset and does not prove these models or
+required-model dispatch on that version; validate on the installed CLI.
 
 Profile defaults can also be generated with a chosen configuration:
 
@@ -146,7 +188,7 @@ Providing every part does not mean it fits every model context: lower chunk
 limits or report partial if a child cannot read everything. Never silently cut
 the review scope. Check output is preserved, not reduced to a claimed PASS.
 
-All eleven profiles declare `include-custom-instructions: true`. The adapter
+All twelve profiles declare `include-custom-instructions: true`. The adapter
 uses native loading plus explicit scoped handoff for:
 
 - Root/nested AGENTS.md, CLAUDE.md, `.claude/CLAUDE.md`, GEMINI.md and
@@ -209,6 +251,21 @@ scope, instructions, requirements, checks, personas, rules, config and harness
 identity are fingerprinted, but a fingerprint alone does not establish model
 identity. Current-run completion is persisted; cancelled running assignments
 must be marked failed and retried, not treated as completed.
+
+## Difficult-finding follow-up
+
+After the user selects a difficult finding for investigation, resolve its settings:
+
+```sh
+python3 SKILL_ROOT/scripts/copilot-package.py model-settings --repo /path/to/repo --role deep-dive
+```
+
+Dispatch `review-all-deep-dive` through the native task tool with the returned
+model and `reasoning_effort`, plus the finding, target/scope, applicable scoped
+instructions, requirements, shared rules, source snapshots/diff and check evidence.
+It returns read-only root-cause analysis and fix options. Its output never updates
+a verdict directly; any changed findings/fixes require a fresh review package.
+Ordinary explanations and test suggestions stay with the Sol coordinator.
 
 ## Reliable headless gates
 
@@ -277,7 +334,7 @@ additional native reads and supplies role-specific result contracts.
 This verifies the context handoff, not a full ten-axis quality benchmark or
 an end-to-end live headless gate. The full model-backed rubric eval suite was
 not run. That recorded run used the previous model defaults; it does not verify
-the new GPT 6.1 Sol/High defaults. Cross-run result reuse remains disabled.
+the mixed Sol/Luna/Opus preset or the Astra follow-up. Cross-run result reuse remains disabled.
 
 Minimum CLI version inspected and exercised: **1.0.95**, macOS, Python 3.9.6,
 Bash 5.3.20. `include-custom-instructions` was introduced in **1.0.86**;
