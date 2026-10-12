@@ -9,7 +9,7 @@ import re
 import sys
 
 from copilot_common import SKILL, adapt, agent_id, atomic, body, cli_version, digest, file_hash
-from copilot_common import load_module, model_for, persona_text, read_json, safe_path
+from copilot_common import load_module, model_for, persona_text, read_json, reasoning_for, safe_path
 
 MARKER = "review-all-install.json"
 
@@ -38,6 +38,7 @@ def assemble(config=None):
             "description": f"review-all {axis}: independent, evidence-based review; requires a dispatch package",
             "tools": tools,
             "model": model_for(axis, config),
+            "reasoning-effort": reasoning_for(config),
             "include-custom-instructions": True,
         }
         frontmatter = "\n".join(f"{k}: {json.dumps(v)}" for k, v in header.items())

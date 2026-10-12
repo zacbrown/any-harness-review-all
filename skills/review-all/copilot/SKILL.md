@@ -59,11 +59,12 @@ Discover CI fallback commands, test scoping, template compiler requirements,
 spec existence, dependencies and optional runtime probes as in the workflow.
 `init` follows the canonical wizard, writing only Copilot configuration.
 
-Model defaults are in `copilot/models.json`: gpt-5.4 for behavioral roles,
-gpt-5.4-mini for shape-matching roles and the verifier. These are visible
-substitutions for Claude's opus/sonnet/haiku tiers, not equivalent model claims.
+Model defaults are in `copilot/models.json`: **gpt-6.1-sol (GPT 6.1 Sol)** with
+**high reasoning effort** for all ten reviewers and the verifier. These are
+explicit Copilot settings, not equivalents of Claude's opus/sonnet/haiku tiers.
 Config `models` maps canonical axis IDs to explicit Copilot IDs;
-`verifierModel` overrides the verifier. Validate availability in the current
+`verifierModel` overrides the verifier and `reasoningEffort` overrides the shared
+reasoning default. Validate model and effort availability in the current
 runtime. If unavailable, ask for an explicit substitution (headless: error),
 record it in configuration and rebuild; never silently fall back.
 Report requested models and runtime-exposed effective models; use null when
@@ -144,9 +145,12 @@ python3 SKILL_ROOT/scripts/copilot-results.py start RUN --assignment ID
 ```
 
 This prints the essential prompt, exact assignment path, explicit named
-`agent`, requested `model`, attempt, and time budget. Dispatch using Copilot's
-native task tool with **agent_type equal to the returned agent name**, model
-equal to the configured ID, and the returned prompt. Never use
+`agent`, requested `model`, `reasoning_effort`, attempt, and time budget. Dispatch
+using Copilot's native task tool with **agent_type equal to the returned agent
+name**, `model` and `reasoning_effort` equal to the returned settings, and the
+returned prompt. High reasoning must be an actual task parameter, not just
+an instruction to think harder. If the runtime cannot set it, report that
+limitation instead of silently inheriting a different effort. Never use
 `subagent_type: general-purpose`, fork/inherited contexts, or a top-level
 `copilot --agent` process in place of a child. Ten IDs:
 review-all-standards, review-all-bugs-security, review-all-dry-smells,

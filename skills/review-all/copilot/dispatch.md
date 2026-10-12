@@ -23,7 +23,9 @@ result if one is necessary and unavailable; never manufacture check evidence.
 The coordinator runs checks. Unobserved runtime/data/rendering claims retain
 the canonical unverified cap.
 
-Use the configured model from the assignment. Report an effective model only
+Use the configured model and reasoningEffort from the assignment (defaults:
+gpt-6.1-sol with high reasoning). The coordinator sets both on the native
+dispatch; prose alone does not configure reasoning effort. Report an effective model only
 if the runtime exposes it; otherwise use null. Do not guess it from your persona.
 Model tier names in canonical prose are rationale, not Copilot model IDs.
 The package shared-rules component supplies resolved quotas and tool names.

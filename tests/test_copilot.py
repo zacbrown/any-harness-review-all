@@ -12,13 +12,14 @@ from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "skills/review-all/scripts"
 sys.path.insert(0, str(SCRIPTS))
-from copilot_common import atomic, body, cli_version, digest, load_module, now, read_json  # noqa: E402
+from copilot_common import atomic, body, cli_version, digest, load_module, model_for, now, read_json, reasoning_for  # noqa: E402
 from copilot_instructions import collect  # noqa: E402
 
 PACKAGE = load_module("copilot-package")
 RESULTS = load_module("copilot-results")
 INSTALL = load_module("copilot-install")
 GATE = load_module("copilot-gate")
+EVALS = load_module("run-evals-copilot")
 
 
 class Fixture(unittest.TestCase):
@@ -95,6 +96,30 @@ class Fixture(unittest.TestCase):
 
 
 class TestCopilotPackages(Fixture):
+    def test_model_defaults_and_explicit_overrides(self):
+        for axis in PACKAGE.AXES.AGENT_IDS + ["verifier", "coordinator"]:
+            self.assertEqual("gpt-6.1-sol", model_for(axis, {}))
+        self.assertEqual("high", reasoning_for({}))
+        config = {"models": {"01-standards": "gpt-5.4-mini"}, "verifierModel": "gpt-5.4",
+                  "reasoningEffort": "medium"}
+        self.assertEqual("gpt-5.4-mini", model_for("01-standards", config))
+        self.assertEqual("gpt-5.4", model_for("verifier", config))
+        self.assertEqual("gpt-6.1-sol", model_for("02-bugs-security", config))
+        self.assertEqual("medium", reasoning_for(config))
+        with self.assertRaisesRegex(ValueError, "reasoningEffort"):
+            reasoning_for({"reasoningEffort": "invalid"})
+
+    def test_reasoning_effort_is_bound_to_the_package_and_dispatch(self):
+        self.write(".copilot/review-all.json", '{"reasoningEffort":"medium"}')
+        directory, manifest = self.prepare()
+        assignment = next(iter(manifest["assignments"].values()))
+        self.assertEqual("medium", assignment["reasoningEffort"])
+        dispatch = RESULTS.start(directory, assignment["id"])
+        self.assertEqual("medium", dispatch["reasoning_effort"])
+        self.write(".copilot/review-all.json", '{"reasoningEffort":"high"}')
+        with self.assertRaises(ValueError):
+            PACKAGE.fresh(directory)
+
     def test_unsupported_cli_versions_are_explicit(self):
         with patch("copilot_common.run", return_value=b"GitHub Copilot CLI 1.0.85"):
             with self.assertRaisesRegex(ValueError, "minimum tested"):
@@ -113,7 +138,8 @@ class TestCopilotPackages(Fixture):
                 self.assertIn(phrase, payload)
             self.assertTrue(all(Path(p).is_absolute() for p in assignment["mandatory"]))
             self.assertEqual(["src/a.py"], assignment["files"])
-            self.assertNotIn(assignment["model"], ("opus", "sonnet", "haiku"))
+            self.assertEqual("gpt-6.1-sol", assignment["model"])
+            self.assertEqual("high", assignment["reasoningEffort"])
 
     def test_scoped_instructions_imports_and_disabled_sources(self):
         root = self.write("AGENTS.md", "Root @guide.txt\n")
@@ -280,6 +306,8 @@ class TestCopilotResults(Fixture):
 
         def complete(assignment):
             dispatch = RESULTS.start(directory, assignment["id"])
+            self.assertEqual("gpt-6.1-sol", dispatch["model"])
+            self.assertEqual("high", dispatch["reasoning_effort"])
             output = directory / (assignment["id"] + "-result.json")
             atomic(output, self.result(assignment, dispatch["attempt"]))
             return RESULTS.accept(directory, assignment["id"], output)
@@ -309,6 +337,8 @@ class TestCopilotResults(Fixture):
         RESULTS.make_verifiers(directory)
         plan = read_json(directory / "verification.json")
         first = next(iter(plan["assignments"].values()))
+        self.assertEqual("gpt-6.1-sol", first["model"])
+        self.assertEqual("high", first["reasoningEffort"])
         self.accept(directory, first, [self.judgment(first)])
         return directory, manifest, first
 
@@ -318,6 +348,8 @@ class TestCopilotResults(Fixture):
         RESULTS.make_verifiers(directory, votes=True)
         plan = read_json(directory / "verification.json")
         second = next(a for a in plan["assignments"].values() if a["vote"] == 2)
+        self.assertEqual("gpt-6.1-sol", second["model"])
+        self.assertEqual("high", second["reasoningEffort"])
         self.assertNotIn('"score"', json.dumps(second))
         self.assertNotIn('"verdict"', json.dumps(second))
         self.assertEqual(first["candidates"], second["candidates"])
@@ -377,6 +409,41 @@ class TestCopilotResults(Fixture):
                      patch.object(GATE.RESULTS, "persist_state"), \
                      patch.object(sys, "argv", ["copilot-gate.py", "--repo", str(self.repo), "--allow-tools", "--", "--staged"]):
                     self.assertEqual(expected, GATE.main())
+
+    def test_headless_model_and_reasoning_flags_have_defaults_and_overrides(self):
+        cases = [
+            ({}, [], "gpt-6.1-sol", "high"),
+            ({"models": {"coordinator": "gpt-5.4"}, "reasoningEffort": "low"}, [], "gpt-5.4", "low"),
+            ({"models": {"coordinator": "gpt-5.4"}, "reasoningEffort": "low"},
+             ["--model", "gpt-5.4-mini", "--reasoning-effort", "medium"], "gpt-5.4-mini", "medium"),
+        ]
+        for config, extra_args, model, effort in cases:
+            with self.subTest(model=model, effort=effort):
+                self.write(".copilot/review-all.json", json.dumps(config))
+                with patch.object(GATE, "cli_version", return_value="1.0.95"), \
+                     patch.object(GATE, "launch", return_value=subprocess.CompletedProcess([], 0)) as launch, \
+                     patch.object(GATE, "validate_verdict", return_value=0), \
+                     patch.object(GATE.RESULTS, "persist_state"), \
+                     patch.object(sys, "argv", ["copilot-gate.py", "--repo", str(self.repo), "--allow-tools"] + extra_args):
+                    self.assertEqual(0, GATE.main())
+                command = launch.call_args.args[0]
+                self.assertEqual(model, command[command.index("--model") + 1])
+                self.assertEqual(effort, command[command.index("--reasoning-effort") + 1])
+
+    def test_eval_coordinator_and_judge_use_default_model_and_effort(self):
+        report = subprocess.CompletedProcess([], 0, stdout=b"review report", stderr=b"")
+        judgment = subprocess.CompletedProcess([], 0, stdout=b"PASS\n", stderr=b"")
+        with patch.dict(os.environ, {"REVIEW_ALL_COPILOT_EVALS": "1"}), \
+             patch.object(EVALS, "cli_version", return_value="1.0.95"), \
+             patch.object(EVALS, "run"), patch.object(EVALS.INSTALL, "install"), \
+             patch.object(EVALS.TALLY, "tally", return_value=([0, 0, 0, 0, 0], "comment")), \
+             patch.object(EVALS.subprocess, "run", side_effect=[report, judgment]) as launch, \
+             patch.object(sys, "argv", ["run-evals-copilot.py", "01", "--out", str(self.root / "evals")]):
+            self.assertEqual(0, EVALS.main())
+        for call in launch.call_args_list:
+            command = call.args[0]
+            self.assertEqual("gpt-6.1-sol", command[command.index("--model") + 1])
+            self.assertEqual("high", command[command.index("--reasoning-effort") + 1])
 
     def test_empty_completed_results_pass_and_missing_chunks_block(self):
         directory, manifest = self.prepare()
@@ -478,6 +545,8 @@ class TestCopilotInstallation(Fixture):
             self.assertIn("include-custom-instructions: true", text)
             self.assertLessEqual(len(body(text)), 30000)
             header = text.split("---", 2)[1]
+            self.assertIn('model: "gpt-6.1-sol"', header)
+            self.assertIn('reasoning-effort: "high"', header)
             self.assertNotIn('"edit"', header)
             self.assertNotIn('"agent"', header)
             if "consistency-history" not in profile.name:
@@ -501,6 +570,14 @@ class TestCopilotInstallation(Fixture):
             INSTALL.install(destination)
         self.assertFalse((destination / "skills").exists())
         self.assertEqual("not ours", conflict.read_text())
+
+    def test_generated_profile_preserves_explicit_overrides(self):
+        files = INSTALL.assemble({"models": {"01-standards": "gpt-5.4-mini"}, "verifierModel": "gpt-5.4",
+                                  "reasoningEffort": "medium"})
+        for axis, model in (("standards", "gpt-5.4-mini"), ("verifier", "gpt-5.4")):
+            header = files[f"agents/review-all-{axis}.agent.md"].decode().split("---", 2)[1]
+            self.assertIn(f'model: "{model}"', header)
+            self.assertIn('reasoning-effort: "medium"', header)
 
 
 if __name__ == "__main__":

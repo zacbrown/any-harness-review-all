@@ -1,16 +1,5 @@
 {
-  "default": "gpt-5.4-mini",
-  "roles": {
-    "01-standards": "gpt-5.4-mini",
-    "02-bugs-security": "gpt-5.4",
-    "03-dry-smells": "gpt-5.4-mini",
-    "04-consistency-history": "gpt-5.4-mini",
-    "05-simplification": "gpt-5.4-mini",
-    "06-security-deep-dive": "gpt-5.4",
-    "07-performance": "gpt-5.4",
-    "08-test-quality": "gpt-5.4-mini",
-    "09-api-contract": "gpt-5.4",
-    "10-a11y-i18n": "gpt-5.4-mini",
-    "verifier": "gpt-5.4-mini"
-  }
+  "default": "gpt-6.1-sol",
+  "reasoningEffort": "high",
+  "roles": {}
 }

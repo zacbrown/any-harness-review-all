@@ -8,7 +8,8 @@ import subprocess
 import sys
 import uuid
 
-from copilot_common import RUNTIME, SCHEMA, cli_version, load_module, now, read_json
+from copilot_common import REASONING_EFFORTS, RUNTIME, SCHEMA, cli_version, load_module, model_for, now
+from copilot_common import read_json, reasoning_for
 
 PACKAGE = load_module("copilot-package")
 RESULTS = load_module("copilot-results")
@@ -49,6 +50,7 @@ def main():
     parser.add_argument("--repo", default=".", type=Path)
     parser.add_argument("--copilot", default="copilot")
     parser.add_argument("--model", help="explicit coordinator model ID")
+    parser.add_argument("--reasoning-effort", choices=REASONING_EFFORTS, help="coordinator reasoning effort (default: high)")
     parser.add_argument("--severity", choices=["critical", "important", "debt", "suggested", "question"])
     parser.add_argument("--no-custom-instructions", action="store_true")
     parser.add_argument("--timeout", type=int, default=3600)
@@ -60,6 +62,10 @@ def main():
         if not args.allow_tools:
             raise ValueError("--allow-tools is required: review executes repository checks; use only trusted code")
         repo = args.repo.resolve()
+        config_path = repo / ".copilot/review-all.json"
+        config = read_json(config_path) if config_path.exists() else {}
+        model = args.model if args.model is not None else model_for("coordinator", config)
+        reasoning_effort = args.reasoning_effort if args.reasoning_effort is not None else reasoning_for(config)
         run_id, started = str(uuid.uuid4()), now()
         target = " ".join(args.target[1:] if args.target[:1] == ["--"] else args.target)
         instruction_mode = "disabled" if args.no_custom_instructions else "enabled"
@@ -75,11 +81,9 @@ def main():
         if args.severity:
             prompt += f" Finalize with --severity {args.severity}."
         command = [args.copilot, "-C", str(repo), "-p", prompt, "--allow-all-tools", "--no-ask-user",
-                   "--no-auto-update"]
+                   "--no-auto-update", "--model", model, "--reasoning-effort", reasoning_effort]
         if args.no_custom_instructions:
             command.append("--no-custom-instructions")
-        if args.model:
-            command.extend(["--model", args.model])
         proc = launch(command, args.timeout)
         if proc.returncode:
             raise ValueError(f"Copilot failed with exit {proc.returncode}; no valid gate completion")

@@ -13,7 +13,7 @@ import uuid
 
 from copilot_common import RUNTIME, SCHEMA, SKILL, adapt, agent_id, atomic, body, cli_version
 from copilot_common import digest, encoded, file_hash, git, load_module, model_for, now, read_json
-from copilot_common import persona_text, resource_hashes, run, safe_path
+from copilot_common import persona_text, reasoning_for, resource_hashes, run, safe_path
 from copilot_instructions import collect
 
 SELECT = load_module("select-files")
@@ -217,6 +217,7 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
     baseline = tree_hashes(repo)
     config_path = repo / ".copilot/review-all.json"
     config = read_json(config_path) if config_path.exists() else {}
+    reasoning_effort = reasoning_for(config)
     for key in ("chunkMaxBytes", "chunkMaxFiles", "maxFileDiffBytes", "quotaDebt", "quotaSuggested", "quotaQuestion"):
         if key in config and (type(config[key]) is not int or config[key] < 0):
             raise ValueError(f"{key} must be a nonnegative integer")
@@ -356,6 +357,7 @@ def prepare(repo, request_path, directory=None, binary="copilot"):
             assignments[assignment_id] = {
                 "schemaVersion": SCHEMA, "id": assignment_id, "kind": "reviewer", "axis": axis,
                 "agent": agent_id(axis), "model": model_for(axis, config),
+                "reasoningEffort": reasoning_effort,
                 "chunks": [chunk_id], "files": names,
                 "diffParts": [{k: v for k, v in m.items() if k != "data"} for m in members],
                 "mandatory": list(dict.fromkeys(mandatory)), "sources": {n: sources[n] for n in names + request.get("supportingFiles", [])},

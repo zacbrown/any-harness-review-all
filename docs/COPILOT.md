@@ -62,10 +62,11 @@ Use **`.copilot/review-all.json`**, never the Claude configuration:
 ```json
 {
   "models": {
-    "02-bugs-security": "gpt-5.4",
-    "04-consistency-history": "gpt-5.4-mini"
+    "02-bugs-security": "gpt-6.1-sol",
+    "04-consistency-history": "gpt-6.1-sol"
   },
-  "verifierModel": "gpt-5.4-mini",
+  "verifierModel": "gpt-6.1-sol",
+  "reasoningEffort": "high",
   "verifierVotes": 3,
   "maxConcurrentAgents": 2,
   "chunkMaxFiles": 40,
@@ -84,19 +85,33 @@ Review-affecting canonical keys retain their meanings (see
 | Reports | `.copilot/reports/` by default |
 | `models` | Explicit Copilot model ID per canonical axis |
 | `verifierModel` | Explicit Copilot model ID, not a Claude short tier |
+| `reasoningEffort` | Shared reviewer/verifier reasoning effort; defaults to `high` |
 | `maxConcurrentAgents` | Coordinator's optional upper bound, also bounded by actual runtime capacity |
 | Gate verdict | Authoritative verdict is per-run `runs/RUN_ID/gate-verdict.json`; legacy singleton `gateVerdictFile` is not a CI oracle |
 | Cache/checkpoint reuse | Cross-run reuse disabled; current-run completion receipts remain persistent |
 | `extraAgents` | Unknown/uninstalled custom axes fail explicitly rather than silently losing coverage |
 
-Defaults: **gpt-5.4** for bugs/security, deep security, performance and API
-contract; **gpt-5.4-mini** for the other six axes and verification. These are
-visible role-based substitutions, not claims of equivalence to Opus/Sonnet/
-Haiku. `copilot/models.json` is the source of the defaults. Availability depends
+Defaults: **GPT 6.1 Sol (`gpt-6.1-sol`) with High (`high`) reasoning** for all ten
+reviewers, the verifier, and CLI-launched coordinators/judges.
+`copilot/models.json` is the single source of these defaults; explicit per-role
+model overrides remain supported. Generated profiles declare
+`model: "gpt-6.1-sol"` and `reasoning-effort: "high"`. Assignment packages record
+both settings, and native task dispatches pass `reasoning_effort: "high"`
+explicitly. This is runtime configuration, not just a prompting instruction.
+Availability depends
 on account, provider and organization policy. An unavailable ID must be
 explicitly substituted or fail; no silent fallback. The coordinator records
 requested IDs and runtime-exposed effective identity when available. A model's
 self-identification is not reliable runtime provenance.
+
+Headless/eval/integration CLI entry points also pass `--reasoning-effort high`.
+Their `--model` and `--reasoning-effort` options override the coordinator (and
+the eval judge) settings; reviewer/verifier settings still come from the review
+configuration. The integration runner applies its options to both parent and
+test children. The headless wrapper also respects `models.coordinator` and
+`reasoningEffort` from the repository configuration when no CLI override is
+given. An interactive parent session keeps its own model settings; the skill
+explicitly configures its review children.
 
 Profile defaults can also be generated with a chosen configuration:
 
@@ -197,7 +212,7 @@ Install the skill first. Then:
 
 ```sh
 python3 ~/.copilot/skills/review-all/scripts/copilot-gate.py \
-  --repo /path/to/repo --allow-tools --model gpt-5.4 \
+  --repo /path/to/repo --allow-tools --model gpt-6.1-sol --reasoning-effort high \
   --severity important -- --staged
 ```
 
@@ -236,7 +251,7 @@ REVIEW_ALL_COPILOT_INTEGRATION=1 python3 tests/copilot_integration.py \
 # Existing synthetic cases + independent Copilot rubric grader:
 REVIEW_ALL_COPILOT_EVALS=1 \
   python3 skills/review-all/scripts/run-evals-copilot.py 01 \
-  --model gpt-5.4 --out /absolute/path/to/eval-evidence
+  --model gpt-6.1-sol --reasoning-effort high --out /absolute/path/to/eval-evidence
 ```
 
 Both model-backed runners are opt-in and retain evidence. The integration
@@ -257,7 +272,8 @@ additional native reads and supplies role-specific result contracts.
 
 This verifies the context handoff, not a full ten-axis quality benchmark or
 an end-to-end live headless gate. The full model-backed rubric eval suite was
-not run. Cross-run result reuse remains disabled.
+not run. That recorded run used the previous model defaults; it does not verify
+the new GPT 6.1 Sol/High defaults. Cross-run result reuse remains disabled.
 
 Minimum CLI version inspected and exercised: **1.0.95**, macOS, Python 3.9.6,
 Bash 5.3.20. `include-custom-instructions` was introduced in **1.0.86**;

@@ -14,6 +14,7 @@ SCHEMA = 1
 MIN_CLI = (1, 0, 95)
 SKILL = Path(__file__).resolve().parent.parent
 RUNTIME = ".copilot/review-all"
+REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 
 
 def load_module(name):
@@ -127,6 +128,13 @@ def model_for(axis, config):
         value = config.get("verifierModel", value)
     if not isinstance(value, str) or not value or value in {"opus", "sonnet", "haiku", "inherit", "auto"}:
         raise ValueError(f"{axis}: use an explicit Copilot model ID, not {value!r}")
+    return value
+
+
+def reasoning_for(config):
+    value = config.get("reasoningEffort", models()["reasoningEffort"])
+    if value not in REASONING_EFFORTS:
+        raise ValueError(f"unsupported reasoningEffort: {value!r}")
     return value
 
 

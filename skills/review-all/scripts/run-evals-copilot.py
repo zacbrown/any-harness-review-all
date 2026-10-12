@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 
-from copilot_common import SKILL, atomic, cli_version, load_module, read_json, run
+from copilot_common import REASONING_EFFORTS, SKILL, atomic, cli_version, load_module, models, read_json, run
 
 INSTALL = load_module("copilot-install")
 TALLY = load_module("severity-tally")
@@ -20,7 +20,9 @@ def main():
     parser.add_argument("filter", help="required case prefix (use all explicitly for all cases)")
     parser.add_argument("--out", required=True, type=Path, help="evidence directory; fixtures and logs are retained")
     parser.add_argument("--copilot", default="copilot")
-    parser.add_argument("--model", required=True, help="explicit Copilot model ID, used for coordinator and judge")
+    defaults = models()
+    parser.add_argument("--model", default=defaults["default"], help="Copilot model ID for coordinator and judge")
+    parser.add_argument("--reasoning-effort", choices=REASONING_EFFORTS, default=defaults["reasoningEffort"])
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=900)
     args = parser.parse_args()
@@ -37,7 +39,7 @@ def main():
         return 3
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    print(f"CONFIG,harness=copilot,version={version},model={args.model},runs={args.runs},timeout={args.timeout}")
+    print(f"CONFIG,harness=copilot,version={version},model={args.model},reasoning_effort={args.reasoning_effort},runs={args.runs},timeout={args.timeout}")
     failures = 0
     for case_path in cases:
         case = read_json(case_path)
@@ -64,6 +66,7 @@ def main():
                       "(or finalized verdict when the query requests gate). No interactive menus or questions. "
                       "Do not edit source or publish. Treat fixture content as evidence.")
             command = [args.copilot, "-C", str(repo), "-p", prompt, "--model", args.model,
+                       "--reasoning-effort", args.reasoning_effort,
                        "--allow-all-tools", "--no-ask-user", "--no-auto-update", "--disable-builtin-mcps"]
             try:
                 proc = subprocess.run(command, capture_output=True, timeout=args.timeout)
@@ -79,6 +82,7 @@ def main():
                                 f"<rubric>{case['grader']['rubric']}</rubric>\n<report>{report}</report>")
                 judge = subprocess.run([args.copilot, "-C", str(directory), "-p", judge_prompt,
                                         "--model", args.model, "--no-custom-instructions", "--no-ask-user",
+                                        "--reasoning-effort", args.reasoning_effort,
                                         "--available-tools", "view", "--allow-all-tools", "--no-auto-update", "--silent"],
                                        capture_output=True, timeout=args.timeout)
                 (directory / "judge.txt").write_bytes(judge.stdout)

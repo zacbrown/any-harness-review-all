@@ -11,7 +11,7 @@ import statistics
 import sys
 
 from copilot_common import SCHEMA, SKILL, agent_id, atomic, digest, encoded, load_module
-from copilot_common import RUNTIME, model_for, now, persona_text, read_json, run
+from copilot_common import RUNTIME, model_for, now, persona_text, read_json, reasoning_for, run
 
 PACKAGE = load_module("copilot-package")
 GATE = load_module("gate-verdict")
@@ -154,6 +154,7 @@ def _start(directory, job_id):
     ledger["jobs"][job_id] = job
     atomic(directory / "completion.json", ledger)
     return {"agent": assignment["agent"], "model": assignment["model"], "attempt": job["attempt"],
+            "reasoning_effort": assignment["reasoningEffort"],
             "timeoutSeconds": assignment["timeoutSeconds"],
             "prompt": (f"Previous attempt failed validation: {retry_reason}. Retry once with the same inputs. "
                        if retry_reason else "") + f"Perform the assigned {assignment['kind']} task, attempt {job['attempt']}. "
@@ -279,6 +280,7 @@ def make_verifiers(directory, votes=False):
             assignment = {
                 "schemaVersion": SCHEMA, "id": job_id, "kind": "verifier", "axis": axis,
                 "agent": agent_id("verifier"), "model": model_for("verifier", manifest["config"]),
+                "reasoningEffort": reasoning_for(manifest["config"]),
                 "runId": manifest["runId"], "packageHash": manifest["packageHash"], "vote": vote,
                 "chunks": sorted({c for a in manifest["assignments"].values() if a["axis"] == axis for c in a["chunks"]}),
                 "files": names, "sources": {n: manifest["sources"][n] for n in names}, "candidates": batch,
