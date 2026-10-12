@@ -166,8 +166,14 @@ def _start(directory, assignment, ledger, agent_namespace):
     job_id = assignment["id"]
     job = ledger["jobs"].get(job_id, {"attempt": 0, "status": "pending"})
     retry_reason = job.get("error")
+    # Keep every attempt available for runtime provenance checks. Only the
+    # current dispatchToken remains eligible for result acceptance.
+    tokens = list(job.get("dispatchTokens", []))
+    if job.get("dispatchToken") and job["dispatchToken"] not in tokens:
+        tokens.append(job["dispatchToken"])
+    token = uuid.uuid4().hex
     job = {"attempt": job["attempt"] + 1, "status": "running", "startedAt": now(),
-           "dispatchToken": uuid.uuid4().hex}
+           "dispatchToken": token, "dispatchTokens": [*tokens, token]}
     ledger["jobs"][job_id] = job
     path = directory / "assignments" / (job_id + ".json")
     return {"assignmentId": job_id,

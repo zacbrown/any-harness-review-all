@@ -73,6 +73,54 @@ class TestScaling(Fixture):
                                                   {"token": "01-standards"})
         self.assertEqual(1, len(errors))
 
+    def test_successful_retry_does_not_hide_first_attempt_model_mismatch(self):
+        directory, manifest = self.prepare()
+        assignment = next(iter(manifest["assignments"].values()))
+        first = RESULTS.start(directory, assignment["id"])
+        incomplete = self.compact(first, status="incomplete", allMandatoryRead=False,
+                                  missingInputs=["truncated source"])
+        self.assertTrue(RESULTS.accept(directory, assignment["id"],
+                                      result_text=json.dumps(incomplete))["retry"])
+        retry = RESULTS.start(directory, assignment["id"])
+        complete = self.compact(retry, sourceFilesRead=list(assignment["sources"]))
+        self.assertEqual("complete", RESULTS.accept(directory, assignment["id"],
+                         result_text=json.dumps(complete))["status"])
+        # Runtime identity can be exposed before the incomplete final response.
+        stream = [
+            {"type": "assistant.message", "agentId": "first", "data": {"model": "wrong-model"}},
+            {"type": "assistant.message", "agentId": "first", "data": {"content": json.dumps(incomplete)}},
+            {"type": "assistant.message", "agentId": "retry", "data": {
+                "model": assignment["model"], "content": json.dumps(complete)}},
+        ]
+        jobs = RESULTS.state(directory)["jobs"]
+        errors = INTEGRATION.runtime_model_errors(stream, {assignment["axis"]: assignment["model"]},
+                                                  INTEGRATION.dispatch_token_roles(jobs))
+        self.assertEqual(1, len(errors), errors)
+        self.assertIn("wrong-model", errors[0])
+        self.assertIn("agent first", errors[0])
+
+    def test_token_roles_include_verifier_attempts_and_legacy_ledgers(self):
+        jobs = {
+            "verifier--01-standards--1": {"dispatchToken": "verify-retry",
+                                         "dispatchTokens": ["verify-first", "verify-retry"]},
+            "01-standards--chunk-0001": {"dispatchToken": "legacy-reviewer"},
+            "02-bugs-security--chunk-0001": {"status": "pending"},
+        }
+        self.assertEqual({"verify-first": "verifier", "verify-retry": "verifier",
+                          "legacy-reviewer": "01-standards"}, INTEGRATION.dispatch_token_roles(jobs))
+
+    def test_retry_carries_forward_token_from_pre_history_job(self):
+        directory, manifest = self.prepare()
+        job_id = next(iter(manifest["assignments"]))
+        original = RESULTS.start(directory, job_id)
+        RESULTS.accept(directory, job_id, failure="timeout")
+        ledger = RESULTS.state(directory)
+        del ledger["jobs"][job_id]["dispatchTokens"]
+        atomic(directory / "completion.json", ledger)
+        retry = RESULTS.start(directory, job_id)
+        self.assertEqual([original["dispatchToken"], retry["dispatchToken"]],
+                         RESULTS.state(directory)["jobs"][job_id]["dispatchTokens"])
+
     def test_compact_findings_survive_independent_verification_and_finalization(self):
         directory, manifest = self.prepare()
         finding = {"id": "positive-value", "root_cause_key": "other:src/a.py:value",

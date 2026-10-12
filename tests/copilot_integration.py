@@ -50,6 +50,17 @@ def child_calls(stream):
     return calls
 
 
+def dispatch_token_roles(jobs):
+    """Include failed attempts, with a fallback for pre-history ledgers."""
+    roles = {}
+    for job_id, job in jobs.items():
+        role = "verifier" if job_id.startswith("verifier--") else job_id.split("--", 1)[0]
+        for token in [*job.get("dispatchTokens", []), job.get("dispatchToken")]:
+            if token:
+                roles[token] = role
+    return roles
+
+
 def runtime_model_errors(stream, expected_models, token_roles=None):
     # Correlate runtime agent IDs with result-envelope roles, then check every
     # exposed identity, including messages emitted before the final result.
@@ -224,9 +235,7 @@ def main():
     stream = events(transcript)
     expected_models = {"01-standards": args.reviewer_model, "verifier": args.verifier_model}
     jobs = RESULTS.state(directory)["jobs"]
-    token_roles = {job["dispatchToken"]: ("verifier" if job_id.startswith("verifier--") else
-                                         job_id.split("--", 1)[0])
-                   for job_id, job in jobs.items() if job.get("dispatchToken")}
+    token_roles = dispatch_token_roles(jobs)
     errors.extend(runtime_model_errors(stream, expected_models, token_roles))
     # A separate parent turn prevents the production skill's completion/menu
     # behavior from swallowing this deliberately broken, out-of-band probe.
