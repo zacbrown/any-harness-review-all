@@ -26,7 +26,7 @@ as `references/workflow.md` by the Copilot installer.
   Run `copilot --version`. Older/unknown versions: stop with an explicit error.
   `include-custom-instructions: true` was introduced in 1.0.86, but that
   version is not our tested compatibility floor.
-- Verify all eleven named profiles are available. Never substitute Copilot's
+- Verify all twelve named profiles are available. Never substitute Copilot's
   built-in review agent or generic task agent for an unavailable profile.
 - No child inherits this conversation or active skill. Record the user's
   requirements and relevant decisions explicitly, including requirements stated

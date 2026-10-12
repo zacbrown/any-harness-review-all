@@ -14,7 +14,7 @@ Multi-agent code review for [Claude Code](https://code.claude.com/docs/en/overvi
 Install [just](https://just.systems/) to use the checkout's installation recipes.
 Run `just` to list them.
 
-**Copilot CLI:** `just install-copilot` installs the native skill and eleven
+**Copilot CLI:** `just install-copilot` installs the native skill and twelve
 custom profiles under `~/.copilot/`. For a project, use
 `just install-copilot-project /path/to/repo`. Requires CLI >=1.0.95.
 See [Copilot support](docs/COPILOT.md) for configuration, explicit context
