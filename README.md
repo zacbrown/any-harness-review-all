@@ -18,7 +18,7 @@ Setup is explicit; normal reviews never sync dependencies or download Python.
 See the [shared CLI contract](skills/review-all/references/cli.md) for direct
 uv invocation without just, all command interfaces, platform limits and evidence.
 
-**Copilot CLI:** `just install-copilot` installs the native skill and eleven
+**Copilot CLI:** `just install-copilot` installs the native skill and twelve
 custom profiles under `~/.copilot/`. For a project, use
 `just install-copilot-project /path/to/repo`. Requires CLI >=1.0.95.
 See [Copilot support](docs/COPILOT.md) for configuration, explicit context

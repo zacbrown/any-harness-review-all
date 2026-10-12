@@ -63,6 +63,7 @@ existing helper contracts and algorithms; a legacy `NAME.py` is invoked as the
 | `code-hash`, `state-sweep` | existing positional arguments | hashes / lifecycle sweep; writes remain harness-specific | existing helper exit codes |
 | `export-findings`, `gate-verdict`, `severity-tally`, `eval-scorecard` | existing input formats and flags | existing JSON/SARIF/verdict/SCORE formats | existing helper exit codes |
 | `copilot-package prepare\|fresh` | request / run directory | immutable run package, scoped context and real check receipts | 0; 2 error |
+| `copilot-package model-settings --role ROLE` | explicit `--repo`; role name | resolved per-stage model and reasoning settings | 0; 2 error |
 | `copilot-results` | start/accept/fail/verifiers/votes/finalize/persist arguments | locked completion ledger, independent verifier inputs, reports/verdict/state | 0; finalize 1 blocked; 2 invalid |
 | `copilot-gate` | explicit repository, target, permissions and model flags | fresh receipt-recomputed verdict; lifecycle persisted only after validation | 0 pass; 1 blocked/partial; 2 missing/stale/malformed/mismatched/execution error |
 | `install`, `uninstall` | `--harness claude\|copilot`, `--user` or `--project PATH` | ownership manifest, resources/profiles/environment; preserve edited/unrelated files | 0; 2 collision/error |
@@ -115,8 +116,8 @@ CI configuration alone is not evidence of passing Windows execution.
 **Windows 11 x64 smoke evidence is pending.** On an actual Windows 11 machine,
 record OS/tool versions, setup/install/discovery/check/gate results, special-path
 and descendant-cleanup results, and uninstall preservation. Record live Copilot
-subagent dispatch and a complete gate separately with the configured
-`gpt-6.1-sol` / `high` defaults. Do not treat deterministic stubs, hosted Windows
+subagent dispatch and a complete gate separately with the configured per-stage
+defaults in `copilot/models.json` (see `docs/COPILOT.md`). Do not treat deterministic stubs, hosted Windows
 Server, or the older macOS context-handoff smoke as this evidence.
 ARM64 Windows and network-share repositories remain unclaimed.
 Windows will not delete the Python executable running the uninstaller. To remove

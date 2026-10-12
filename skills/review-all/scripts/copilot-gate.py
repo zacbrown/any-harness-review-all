@@ -67,7 +67,7 @@ def main():
         config_path = repo / ".copilot/review-all.json"
         config = read_json(config_path) if config_path.exists() else {}
         model = args.model if args.model is not None else model_for("coordinator", config)
-        reasoning_effort = args.reasoning_effort if args.reasoning_effort is not None else reasoning_for(config)
+        reasoning_effort = args.reasoning_effort if args.reasoning_effort is not None else reasoning_for(config, "coordinator")
         run_id, started = str(uuid.uuid4()), now()
         target = " ".join(args.target[1:] if args.target[:1] == ["--"] else args.target)
         instruction_mode = "disabled" if args.no_custom_instructions else "enabled"

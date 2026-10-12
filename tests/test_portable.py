@@ -138,6 +138,17 @@ class Entrypoints(NativeCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("runKey", json.loads(result.stdout))
 
+    def test_model_settings_use_explicit_repository_and_role(self):
+        repo = self.repo()
+        config = repo / ".copilot/review-all.json"
+        config.parent.mkdir()
+        config.write_text(json.dumps({"models": {"deep-dive": "gpt-6-luna"},
+                                      "reasoningEfforts": {"deep-dive": "medium"}}), encoding="utf-8")
+        result = self.command("--repo", str(repo), "copilot-package", "model-settings", "--role", "deep-dive")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual({"role": "deep-dive", "model": "gpt-6-luna", "reasoning_effort": "medium"},
+                         json.loads(result.stdout))
+
     def test_execute_reports_failure_timeout_and_missing_executable(self):
         spec = self.root / "check.json"
         for command, timeout, expected in (([sys.executable, "-c", "raise SystemExit(9)"], 10, 1),
