@@ -256,7 +256,7 @@ class TestCopilotPackages(Fixture):
         policy = self.request["instructions"]
         entries, watched, errors = collect(self.repo, ["src/a.py", "docs/c.md"], policy)
         self.assertEqual([], errors)
-        nested = next(e for e in entries if e["source"].endswith("/src/AGENTS.md"))
+        nested = next(e for e in entries if Path(e["source"]) == self.repo / "src/AGENTS.md")
         self.assertEqual(["src/a.py"], nested["files"])
         self.assertEqual(["src/a.py"], next(e for e in entries if e["source"] == str(module.resolve()))["files"])
         self.assertIn(str(self.repo / "guide.txt"), watched)
@@ -481,7 +481,7 @@ class TestCopilotResults(Fixture):
             self.assertTrue(set(source["parts"]).issubset(verifier["mandatory"]))
             instruction_paths = [p for p in verifier["mandatory"] if "-instructions." in p]
             scoped = json.loads("".join(Path(p).read_text(encoding="utf-8") for p in instruction_paths))
-            rule = next(i for i in scoped if i["source"].endswith("/support/AGENTS.md"))
+            rule = next(i for i in scoped if Path(i["source"]) == self.repo / "support/AGENTS.md")
             self.assertEqual(["support/limits.py"], rule["files"])
             self.assertIn("Supporting scope rule.", rule["content"])
             result = self.result(verifier, findings=[self.judgment(verifier)])
