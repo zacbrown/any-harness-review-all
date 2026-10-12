@@ -8,6 +8,17 @@ import sys
 import tempfile
 
 
+def windows_git_directory(executable):
+    if not executable:
+        raise RuntimeError("Git for Windows missing")
+    directory = Path(executable).parent
+    if directory.name.lower() == "bin":
+        directory = directory.parent / "cmd"
+    if directory.name.lower() != "cmd" or not (directory / "git.exe").is_file():
+        raise RuntimeError(f"native Git cmd/git.exe not found for {executable}")
+    return directory
+
+
 def main():
     root = Path(__file__).resolve().parents[1]
     with tempfile.TemporaryDirectory(prefix="review-all-native-path-") as temp:
@@ -19,9 +30,7 @@ def main():
                 if not path:
                     raise RuntimeError(f"{name} missing")
                 shutil.copy2(path, bin_dir / (name + ".exe"))
-            git = Path(shutil.which("git")).parent
-            if git.name.lower() != "cmd":
-                raise RuntimeError(f"expected native Git cmd directory, not Git Bash: {git}")
+            git = windows_git_directory(shutil.which("git"))
             powershell = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0"
             env["PATH"] = os.pathsep.join([str(bin_dir), str(git), str(Path(sys.executable).parent), str(powershell)])
             for name in ("bash", "sh", "timeout", "lsof", "ss", "curl", "rsync", "jq", "sed", "awk", "grep"):

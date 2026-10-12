@@ -108,6 +108,8 @@ fixtures remain explicit unsupported errors, not model failures or green skips.
 Locally exercised: macOS arm64, Python 3.13.2, uv 0.6.9, just 1.58.0.
 The CI matrix runs the same suite and direct uv / just entry points on Ubuntu,
 macOS and Windows Server, including a controlled Windows PATH without Git Bash.
+The Windows driver accepts Git initially found in `Git/bin` or `Git/cmd` and
+uses the verified `Git/cmd/git.exe` directory in its restricted PATH.
 CI configuration alone is not evidence of passing Windows execution.
 
 **Windows 11 x64 smoke evidence is pending.** On an actual Windows 11 machine,
