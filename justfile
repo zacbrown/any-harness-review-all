@@ -36,6 +36,13 @@ uninstall-copilot:
     from review_all.cli import main
     raise SystemExit(main(["uninstall", "--harness", "copilot", "--user"]))
 
+# Regenerate committed marketplace components; --check verifies them without writing.
+[script]
+package-copilot *args:
+    import sys
+    from review_all.cli import main
+    raise SystemExit(main(["copilot-plugin", *sys.argv[1:]]))
+
 # Project recipes retain the historical default: the package checkout.
 [script]
 install-copilot-project project=".":

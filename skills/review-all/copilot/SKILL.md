@@ -14,6 +14,8 @@ below replaces only harness-dependent dispatch, instruction loading, model
 selection, cache/checkpoint reuse, and gate process handling.** It takes
 precedence over the legacy Claude-specific mechanisms in those resources.
 
+## Installation layout
+
 Resolve this SKILL.md's absolute installation directory as `SKILL_ROOT`.
 Read `references/cli.md`; resolve TOOL as `SKILL_ROOT/../../.review-all-tool`.
 Invoke helpers through its locked/no-sync uv CLI, never a reviewed project's
