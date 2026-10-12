@@ -12,6 +12,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import copilot_integration as INTEGRATION
+
 SCRIPTS = Path(__file__).resolve().parents[1] / "skills/review-all/scripts"
 sys.path.insert(0, str(SCRIPTS))
 from copilot_common import atomic, body, cli_version, digest, load_module, model_for, now, read_json, reasoning_for  # noqa: E402
@@ -912,6 +914,121 @@ class TestCopilotInstallation(Fixture):
         deep_dive = files["agents/review-all-deep-dive.agent.md"].decode()
         self.assertNotIn("Return ONLY one JSON object", deep_dive)
         self.assertIn("New findings or proposed fixes must", deep_dive)
+
+    def test_deep_dive_reports_uncertainty_without_reviewer_filtering(self):
+        files = INSTALL.assemble()
+        deep_dive = files["agents/review-all-deep-dive.agent.md"].decode()
+        self.assertIn("infer: false", deep_dive)
+        self.assertIn("Report\nmissing inputs", deep_dive)
+        self.assertIn("remaining uncertainties", deep_dive)
+        self.assertNotIn("## 3-question gate", deep_dive)
+        self.assertNotIn("drop the finding silently", deep_dive)
+        self.assertNotIn("canonical severity, quotas", deep_dive)
+        for axis in PACKAGE.AXES.AGENT_IDS + ["verifier"]:
+            profile = files[f"agents/{INSTALL.agent_id(axis)}.agent.md"].decode()
+            self.assertIn("infer: true", profile)
+            self.assertIn("## 3-question gate", profile)
+            self.assertIn("drop the finding silently", profile)
+
+
+class TestCopilotRuntimeModels(unittest.TestCase):
+    expected = {"01-standards": "gpt-6-luna", "verifier": "claude-opus-5.5"}
+
+    def message(self, agent, axis, model=None, **result_fields):
+        return {"type": "assistant.message", "agentId": agent,
+                "data": {"model": model, "providerId": "runtime-provider",
+                         "content": json.dumps({"axis": axis, **result_fields})}}
+
+    def test_matching_role_models_pass(self):
+        stream = [self.message("reviewer", "01-standards", "gpt-6-luna"),
+                  self.message("verifier", "verifier", "claude-opus-5.5")]
+        self.assertEqual([], INTEGRATION.runtime_model_errors(stream, self.expected))
+
+    def test_each_role_fails_on_runtime_fallback_despite_requested_task_model(self):
+        for agent, axis in (("reviewer", "01-standards"), ("verifier", "verifier")):
+            with self.subTest(axis=axis):
+                stream = [{"type": "assistant.message", "data": {"toolRequests": [{"name": "task",
+                           "arguments": {"model": self.expected[axis], "reasoning_effort": "high"}}]}},
+                          self.message(agent, axis, "gpt-6.1-sol", effectiveModel=self.expected[axis])]
+                errors = INTEGRATION.runtime_model_errors(stream, self.expected)
+                self.assertEqual(1, len(errors))
+                self.assertIn(f"{axis} effective model 'gpt-6.1-sol'", errors[0])
+                self.assertIn(f"requested {self.expected[axis]!r}", errors[0])
+
+    def test_model_on_earlier_child_message_is_checked(self):
+        stream = [{"type": "assistant.message", "agentId": "reviewer",
+                   "data": {"model": "gpt-6.1-sol", "toolRequests": []}},
+                  {"type": "assistant.message", "agentId": "reviewer", "data": {"content": "Tracing source"}},
+                  self.message("reviewer", "01-standards")]
+        self.assertEqual(1, len(INTEGRATION.runtime_model_errors(stream, self.expected)))
+
+    def test_unexposed_models_and_child_self_identification_do_not_fail(self):
+        stream = [self.message("reviewer", "01-standards", effectiveModel="gpt-6.1-sol"),
+                  self.message("verifier", "verifier", effectiveModel="gpt-6-luna")]
+        for event in stream:
+            event["data"].pop("model")
+        self.assertEqual([], INTEGRATION.runtime_model_errors(stream, self.expected))
+        stream[0]["data"]["model"] = None
+        self.assertEqual([], INTEGRATION.runtime_model_errors(stream, self.expected))
+
+    def test_parent_and_unrelated_agents_do_not_use_child_model_expectations(self):
+        stream = [{"type": "assistant.message", "data": {"model": "gpt-6.1-sol"}},
+                  self.message("other", "coordinator", "gpt-6.1-sol"),
+                  self.message("reviewer", "01-standards", "gpt-6-luna")]
+        self.assertEqual([], INTEGRATION.runtime_model_errors(stream, self.expected))
+
+    def test_missing_context_probe_still_checks_runtime_model(self):
+        stream = [self.message("probe", "01-standards", "gpt-6.1-sol",
+                               assignmentId="missing-context-probe", status="incomplete",
+                               missingInputs=["missing.txt"])]
+        self.assertEqual(1, len(INTEGRATION.runtime_model_errors(stream, self.expected)))
+
+    def test_integration_outcome_fails_when_either_child_reports_a_fallback(self):
+        for fallback_axis in (None, "01-standards", "verifier"):
+            with self.subTest(fallback_axis=fallback_axis), tempfile.TemporaryDirectory() as temp:
+                first_id = "01-standards--chunk-0001"
+                reviewer = {"axis": "01-standards", "assignmentId": first_id,
+                            "findings": [{"file": "billing/config.py",
+                                          "title": "audit_tag currency_unit retention_days factor"}]}
+                verifier = {"axis": "verifier", "assignmentId": "verifier-1", "findings": []}
+                ledger = {"jobs": {first_id: {"status": "complete", "result": reviewer},
+                                   "verifier-1": {"status": "complete", "result": verifier}}}
+
+                def run(command, **kwargs):
+                    repo = Path(command[command.index("-C") + 1])
+                    directory = repo / ".copilot/review-all/runs/context-handoff"
+                    probe = "Use task exactly once" in command[command.index("-p") + 1]
+                    outputs = [("probe", {"axis": "01-standards", "assignmentId": "missing-context-probe",
+                                          "status": "incomplete", "missingInputs": ["missing.txt"]})] if probe else [
+                                              ("reviewer", reviewer), ("verifier", verifier)]
+                    stream = []
+                    for agent, result in outputs:
+                        axis = result["axis"]
+                        stream.append({"type": "assistant.message", "data": {"toolRequests": [{
+                            "name": "task", "arguments": {"agent_type": INSTALL.agent_id(axis),
+                            "model": self.expected[axis], "reasoning_effort": "medium" if axis == "01-standards" else "high"}}]}})
+                        model = "gpt-6.1-sol" if axis == fallback_axis and not probe else self.expected[axis]
+                        stream.append(self.message(agent, axis, model, **{k: v for k, v in result.items() if k != "axis"}))
+                    kwargs["stdout"].write("\n".join(json.dumps(event) for event in stream))
+                    if not probe:
+                        atomic(directory / "assignments" / f"{first_id}.json", {"id": first_id, "mandatory": []})
+                        atomic(directory / "verification.json", {"assignments": {
+                            "verifier-1": {"id": "verifier-1", "sources": {}}}})
+                    return subprocess.CompletedProcess(command, 0)
+
+                with patch.dict(os.environ, {"REVIEW_ALL_COPILOT_INTEGRATION": "1"}), \
+                        patch.object(sys, "argv", ["copilot_integration.py", "--out", temp]), \
+                        patch.object(INTEGRATION, "cli_version", return_value="test"), \
+                        patch.object(INTEGRATION, "git"), patch.object(INTEGRATION.INSTALL, "install"), \
+                        patch.object(INTEGRATION.subprocess, "run", side_effect=run), \
+                        patch.object(INTEGRATION.RESULTS, "state", return_value=ledger), \
+                        patch.object(INTEGRATION.PACKAGE, "fresh"), redirect_stdout(io.StringIO()):
+                    status = INTEGRATION.main()
+                outcome = read_json(Path(temp) / "result.json")
+                self.assertEqual(0 if fallback_axis is None else 1, status)
+                self.assertEqual(fallback_axis is None, outcome["passed"])
+                self.assertEqual(0 if fallback_axis is None else 1, len(outcome["errors"]), outcome["errors"])
+                self.assertTrue(outcome["runtimeIdentities"])
 
 
 if __name__ == "__main__":

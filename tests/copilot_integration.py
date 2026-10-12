@@ -49,6 +49,30 @@ def child_calls(stream):
     return calls
 
 
+def runtime_model_errors(stream, expected_models):
+    # Correlate runtime agent IDs with result-envelope roles, then check every
+    # exposed identity, including messages emitted before the final result.
+    # effectiveModel inside child-authored JSON is not runtime provenance.
+    roles = {}
+    for event in stream:
+        data = event.get("data", {})
+        if event.get("agentId") and event.get("type") == "assistant.message" and data.get("content"):
+            try:
+                result = json.loads(data["content"])
+            except ValueError:
+                continue
+            if isinstance(result, dict) and result.get("axis") in expected_models:
+                roles[event["agentId"]] = result["axis"]
+    errors = []
+    for event in stream:
+        axis = roles.get(event.get("agentId"))
+        model = event.get("data", {}).get("model")
+        if axis and model and model != expected_models[axis]:
+            errors.append(f"{axis} effective model {model!r} differs from requested {expected_models[axis]!r} "
+                          f"(agent {event['agentId']})")
+    return errors
+
+
 def source_read_errors(stream, ledger, plan):
     errors = []
     for assignment in plan["assignments"].values():
@@ -192,6 +216,8 @@ def main():
     if proc.returncode:
         errors.append(f"CLI exited {proc.returncode}")
     stream = events(transcript)
+    expected_models = {"01-standards": args.reviewer_model, "verifier": args.verifier_model}
+    errors.extend(runtime_model_errors(stream, expected_models))
     # A separate parent turn prevents the production skill's completion/menu
     # behavior from swallowing this deliberately broken, out-of-band probe.
     try:
@@ -216,6 +242,7 @@ def main():
         if missing_proc.returncode:
             errors.append(f"missing-context parent exited {missing_proc.returncode}")
         missing_stream = events(out / "missing-transcript.jsonl")
+        errors.extend(runtime_model_errors(missing_stream, expected_models))
         stream += missing_stream
         for event in missing_stream:
             if event.get("agentId") and event.get("type") == "assistant.message" and event.get("data", {}).get("content"):
@@ -259,8 +286,10 @@ def main():
         identities = []
         for event in stream:
             data = event.get("data", {})
-            if event.get("agentId") and event.get("type") == "assistant.message" and data.get("content"):
+            if event.get("agentId") and event.get("type") == "assistant.message":
                 identities.append({"agentId": event["agentId"], "model": data.get("model"), "provider": data.get("providerId")})
+                if not data.get("content"):
+                    continue
                 try:
                     child_results.append(json.loads(data["content"]))
                 except ValueError:

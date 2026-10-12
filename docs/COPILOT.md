@@ -148,10 +148,12 @@ only the parent. It defaults to the mixed Sol/Luna/Opus configuration.
 
 This preset is a candidate for evaluation, not a measured quality improvement.
 Compare missed defects, false positives, completion failures, latency and credits
-against all-Sol/high. For that baseline, set all ten axis IDs plus `coordinator`,
-`judge`, and `deep-dive` in `models` to `gpt-6.1-sol`, set `verifierModel` to the
+against all-Sol/high. For that baseline, set all ten axis IDs plus `coordinator`
+and `deep-dive` in `models` to `gpt-6.1-sol`, set `verifierModel` to the
 same ID, set `reasoningEffort: high`, and remove `reasoningEfforts` overrides.
-Keep the rubric judge fixed across experimental arms when comparing review models.
+Leave `models.judge` unchanged and pass `--judge-model claude-opus-5.5` and
+`--judge-reasoning-effort high` to both eval runs so the rubric judge stays fixed
+across experimental arms when comparing review models.
 
 Model IDs and dispatch controls are documented in the
 [Copilot CLI reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference).

@@ -46,10 +46,11 @@ def assemble(config=None):
         }
         frontmatter = "\n".join(f"{k}: {json.dumps(v)}" for k, v in header.items())
         role_protocol = "" if axis == "deep-dive" else protocol
-        text = (f"---\n{frontmatter}\n---\n\n{role_protocol}\n\n{persona}\n\n{shared_gate}\n\n"
-                "Read the supplied shared-rules component in full. "
-                "It contains the canonical severity, quotas, claim classes, dismissal, "
-                "evidence, and exploration rules, resolved for this run.\n")
+        reviewer_guidance = "" if axis == "deep-dive" else (
+            f"{shared_gate}\n\nRead the supplied shared-rules component in full. "
+            "It contains the canonical severity, quotas, claim classes, dismissal, "
+            "evidence, and exploration rules, resolved for this run.\n")
+        text = f"---\n{frontmatter}\n---\n\n{role_protocol}\n\n{persona}\n\n{reviewer_guidance}"
         text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
         if len(body(text)) > 30000:
             raise ValueError(f"{axis} exceeds Copilot's 30,000-character profile limit")
